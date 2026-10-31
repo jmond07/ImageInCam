@@ -20,6 +20,7 @@ function createWindow() {
   win.setAspectRatio(16 / 9);
   win.once('ready-to-show', () => win.show());
   win.loadFile(path.join(__dirname, 'src', 'index.html'));
+  if (!app.isPackaged) win.webContents.openDevTools({ mode: 'detach' });
 }
 
 app.whenReady().then(createWindow);

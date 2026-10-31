@@ -1,11 +1,40 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' blob: data:; media-src 'self' blob:; connect-src 'self'; worker-src 'self' blob:">
   <title>ImageInCam</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <h1>Greetings</h1>
+  <canvas id="stage" width="1280" height="720"></canvas>
+  <video id="cam" playsinline muted hidden></video>
+
+  <section id="welcome" class="screen active">
+    <h1>ImageInCam</h1>
+    <p class="hint">Press any key to start<span class="dots"></span></p>
+  </section>
+
+  <section id="camera-step" class="screen">
+    <div class="card">
+      <h2>Camera access</h2>
+      <p>ImageInCam uses your camera to track your hands. Nothing is recorded or uploaded.</p>
+      <p id="camera-error" class="error" hidden></p>
+      <button id="allow-camera" class="btn primary">Allow camera</button>
+    </div>
+  </section>
+
+  <section id="upload-step" class="screen glass">
+    <div class="card">
+      <h2>Choose your images</h2>
+      <p>Pick the pictures you want to place with your hands.</p>
+      <input id="file-input" type="file" accept="image/*" multiple hidden>
+      <button id="pick-files" class="btn primary">Browse files…</button>
+      <p id="file-count" class="muted"></p>
+      <button id="start" class="btn" disabled>Start</button>
+    </div>
+  </section>
+
+  <script src="renderer.js"></script>
 </body>
 </html>
