@@ -33,6 +33,12 @@ const state = {
   labVisible: true,
 };
 
+function fixHandLabel(name) {
+  if (name === 'Left') return 'Right';
+  if (name === 'Right') return 'Left';
+  return '?';
+}
+
 // Shows one screen; 'live' matches none, so the canvas is revealed.
 function goTo(step) {
   state.step = step;
@@ -116,7 +122,7 @@ function detect() {
   state.detectMs = performance.now() - t0;
   state.hands = result.landmarks.map((points, i) => ({
     points,
-    label: result.handedness[i]?.[0]?.categoryName ?? '?',
+    label: fixHandLabel(result.handedness[i]?.[0]?.categoryName),
     score: result.handedness[i]?.[0]?.score ?? 0,
   }));
 }
