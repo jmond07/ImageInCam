@@ -88,3 +88,17 @@ p  { margin: 0 0 1rem; font-size: 0.9rem; line-height: 1.4; }
 
 .muted { color: var(--muted); font-size: 0.85rem; margin: 0.75rem 0; }
 .error { color: var(--danger); font-size: 0.85rem; }
+
+/* Lab overlay (debug) */
+#lab {
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  margin: 0;
+  padding: 6px 8px;
+  font: 12px/1.4 ui-monospace, Consolas, monospace;
+  color: #d8d8e0;
+  background: rgba(0, 0, 0, 0.55);
+  border-radius: 6px;
+  pointer-events: none;
+}
