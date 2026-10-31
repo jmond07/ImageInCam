@@ -7,7 +7,14 @@
     "start": "electron .",
     "dist": "electron-builder",
     "assets": "node scripts/copy-assets.js"
-  },  
+  },
+  "build": {
+    "appId": "com.jmond07.imageincam",
+    "productName": "ImageInCam",
+    "files": ["main.js", "package.json", "src/**/*"],
+    "win": { "target": "nsis" },
+    "nsis": { "oneClick": false, "allowToChangeInstallationDirectory": true }
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/jmond07/ImageInCam.git"
@@ -21,10 +28,8 @@
   },
   "homepage": "https://github.com/jmond07/ImageInCam#readme",
   "devDependencies": {
+    "@mediapipe/tasks-vision": "^1.2.0",
     "electron": "^45.2.1",
     "electron-builder": "^26.18.0"
-  },
-  "dependencies": {
-    "@mediapipe/tasks-vision": "^1.2.0"
   }
 }
