@@ -1,5 +1,8 @@
 import { FilesetResolver, HandLandmarker } from './vendor/mediapipe/vision_bundle.mjs';
 import { createPinchTracker } from './gestures/pinch.js';
+import { loadStamps, MAX_STAMPS } from './stamps.js';
+import { createScene } from './scene.js';
+import { createInteraction } from './interaction.js';
 
 const WASM_PATH = new URL('./vendor/mediapipe/wasm', document.baseURI).href;
 const MODEL_PATH = new URL('./assets/hand_landmarker.task', document.baseURI).href;
@@ -13,6 +16,7 @@ const video = document.getElementById('cam');
 const canvas = document.getElementById('stage');
 const ctx = canvas.getContext('2d');
 const lab = document.getElementById('lab');
+const hud = document.getElementById('hud');
 
 const allowBtn = document.getElementById('allow-camera');
 const cameraError = document.getElementById('camera-error');
@@ -25,6 +29,8 @@ const state = {
   step: 'welcome',
   stream: null,
   files: [],
+  stamps: [], // resized images ready to use
+  selected: 0, // index of the active stamp
   tracker: null,
   trackerStatus: 'Not loaded',
   delegate: '-',
@@ -33,6 +39,9 @@ const state = {
   fps: 0,
   labVisible: true,
 };
+
+const scene = createScene();
+const interaction = createInteraction(scene);
 
 // One pinch tracker per hand (keyed by label)
 const pinchTrackers = {
@@ -54,13 +63,66 @@ function goTo(step) {
   for (const [name, el] of Object.entries(screens)) {
     el.classList.toggle('active', name === step);
   }
+  hud.hidden = step !== 'live';
 }
 
-// Keyboard: any key leaves the welcome screen, L toggles the lab overlay
+// ---------- Keyboard ----------
 window.addEventListener('keydown', (e) => {
-  if (state.step === 'welcome') goTo('camera');
-  else if (e.key.toLowerCase() === 'l') state.labVisible = !state.labVisible;
+  if (state.step === 'welcome') return goTo('camera');
+  if (state.step !== 'live') return;
+
+  const key = e.key.toLowerCase();
+  if (key === 'l') {
+    state.labVisible = !state.labVisible;
+  } else if (key === 'c') {
+    interaction.releaseAll();
+    scene.clear();
+  } else if (/^[1-9]$/.test(key)) {
+    selectStamp(Number(key) - 1);
+  }
 });
+
+// ---------- HUD ----------
+function drawThumb(thumb, stamp) {
+  const g = thumb.getContext('2d');
+  const k = Math.min(thumb.width / stamp.width, thumb.height / stamp.height);
+  const w = stamp.width * k;
+  const h = stamp.height * k;
+  g.drawImage(stamp.image, (thumb.width - w) / 2, (thumb.height - h) / 2, w, h);
+}
+
+function buildHud() {
+  hud.replaceChildren();
+  state.stamps.forEach((stamp, i) => {
+    const slot = document.createElement('div');
+    slot.className = 'slot';
+
+    const thumb = document.createElement('canvas');
+    thumb.width = thumb.height = 88; // drawn at 2x, shown at 44px
+    drawThumb(thumb, stamp);
+
+    const key = document.createElement('span');
+    key.className = 'key';
+    key.textContent = i + 1;
+
+    slot.append(thumb, key);
+    hud.append(slot);
+  });
+  updateHud();
+}
+
+function updateHud() {
+  [...hud.children].forEach((slot, i) => {
+    slot.classList.toggle('selected', i === state.selected);
+  });
+}
+
+function selectStamp(index) {
+  if (index < state.stamps.length) {
+    state.selected = index;
+    updateHud();
+  }
+}
 
 // ---------- Camera ----------
 function cameraErrorMessage(err) {
@@ -147,6 +209,11 @@ function detect() {
   for (const [label, tracker] of Object.entries(pinchTrackers)) {
     if (!seen.has(label)) tracker.reset();
   }
+
+  // Gestures only act once we're in the live view
+  if (state.step === 'live') {
+    interaction.update(state.hands, canvas, state.stamps[state.selected]);
+  }
 }
 
 // ---------- Drawing ----------
@@ -209,7 +276,8 @@ function updateLab() {
     `FPS ${state.fps} · detect ${state.detectMs.toFixed(1)} ms · ${state.delegate}\n` +
     `${state.trackerStatus}\n` +
     `${handLines}\n` +
-    `[L] hide`;
+    `Stamp ${state.selected + 1}/${state.stamps.length} · placed ${scene.count}\n` +
+    `[L] hide  [C] clear`;
 }
 
 // ---------- Main loop ----------
@@ -218,19 +286,21 @@ let frameCount = 0;
 let lastFpsTime = performance.now();
 
 function frame(now) {
-  // Mirrored video
+  // 1. Mirrored video
   ctx.save();
   ctx.scale(-1, 1);
   ctx.drawImage(video, -canvas.width, 0, canvas.width, canvas.height);
   ctx.restore();
 
-  // Only run detection when the camera delivered a new frame
+  // 2. Detect BEFORE drawing the placed images, so the tracker only sees the camera
   if (state.tracker && video.currentTime !== lastVideoTime) {
     lastVideoTime = video.currentTime;
     detect();
   }
 
-  drawHands();
+  // 3. Placed images, then the skeleton on top (skeleton only while the lab is on)
+  if (state.step === 'live') scene.draw(ctx, canvas);
+  if (state.labVisible) drawHands();
 
   frameCount++;
   if (now - lastFpsTime >= 500) {
@@ -245,10 +315,27 @@ function frame(now) {
 
 // ---------- Image picker ----------
 pickBtn.addEventListener('click', () => fileInput.click());
+
 fileInput.addEventListener('change', () => {
   state.files = [...fileInput.files];
   const n = state.files.length;
-  fileCount.textContent = n ? `${n} image${n === 1 ? '' : 's'} selected` : '';
+  const extra = n > MAX_STAMPS ? ` (first ${MAX_STAMPS} will be used)` : '';
+  fileCount.textContent = n ? `${n} image${n === 1 ? '' : 's'} selected${extra}` : '';
   startBtn.disabled = n === 0;
 });
-startBtn.addEventListener('click', () => goTo('live'));
+
+startBtn.addEventListener('click', async () => {
+  startBtn.disabled = true;
+  startBtn.textContent = 'Loading…';
+  state.stamps = await loadStamps(state.files.slice(0, MAX_STAMPS));
+  startBtn.textContent = 'Start';
+
+  if (!state.stamps.length) {
+    fileCount.textContent = 'Could not read those images. Try other files.';
+    return; // stays disabled until new files are picked
+  }
+
+  state.selected = 0;
+  buildHud();
+  goTo('live');
+});

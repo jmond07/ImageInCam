@@ -102,3 +102,38 @@ p  { margin: 0 0 1rem; font-size: 0.9rem; line-height: 1.4; }
   border-radius: 6px;
   pointer-events: none;
 }
+
+/* HUD: stamp selector */
+.hud {
+  position: fixed;
+  left: 50%;
+  bottom: 12px;
+  transform: translateX(-50%);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  max-width: 96vw;
+  padding: 6px;
+  background: rgba(0, 0, 0, 0.45);
+  border-radius: 10px;
+}
+.hud[hidden] { display: none; }
+
+.slot {
+  position: relative;
+  padding: 2px;
+  border: 2px solid transparent;
+  border-radius: 8px;
+  opacity: 0.6;
+}
+.slot.selected { border-color: #fff; opacity: 1; }
+.slot canvas { display: block; width: 44px; height: 44px; }
+.slot .key {
+  position: absolute;
+  top: 2px;
+  left: 5px;
+  font: 11px ui-monospace, Consolas, monospace;
+  color: #fff;
+  text-shadow: 0 0 3px #000;
+}
