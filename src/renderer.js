@@ -1,4 +1,5 @@
 import { FilesetResolver, HandLandmarker } from './vendor/mediapipe/vision_bundle.mjs';
+import { createPinchTracker } from './gestures/pinch.js';
 
 const WASM_PATH = new URL('./vendor/mediapipe/wasm', document.baseURI).href;
 const MODEL_PATH = new URL('./assets/hand_landmarker.task', document.baseURI).href;
@@ -27,12 +28,20 @@ const state = {
   tracker: null,
   trackerStatus: 'Not loaded',
   delegate: '-',
-  hands: [], // [{ points, label, score }]
+  hands: [], // [{ points, label, score, pinch }]
   detectMs: 0,
   fps: 0,
   labVisible: true,
 };
 
+// One pinch tracker per hand (keyed by label)
+const pinchTrackers = {
+  Left: createPinchTracker(),
+  Right: createPinchTracker(),
+};
+
+// MediaPipe's handedness comes out inverted in our setup (tested: raising the
+// left hand reports "Right"), so we swap it here, in one place.
 function fixHandLabel(name) {
   if (name === 'Left') return 'Right';
   if (name === 'Right') return 'Left';
@@ -120,11 +129,24 @@ function detect() {
   // We detect on the mirrored canvas, so landmarks already match what's on screen
   const result = state.tracker.detectForVideo(canvas, t0);
   state.detectMs = performance.now() - t0;
-  state.hands = result.landmarks.map((points, i) => ({
-    points,
-    label: fixHandLabel(result.handedness[i]?.[0]?.categoryName),
-    score: result.handedness[i]?.[0]?.score ?? 0,
-  }));
+
+  const seen = new Set();
+  state.hands = result.landmarks.map((points, i) => {
+    const category = result.handedness[i]?.[0];
+    const label = fixHandLabel(category?.categoryName);
+    seen.add(label);
+    return {
+      points,
+      label,
+      score: category?.score ?? 0,
+      pinch: pinchTrackers[label]?.update(points, canvas.width, canvas.height),
+    };
+  });
+
+  // Hands that left the frame lose their pinch state
+  for (const [label, tracker] of Object.entries(pinchTrackers)) {
+    if (!seen.has(label)) tracker.reset();
+  }
 }
 
 // ---------- Drawing ----------
@@ -151,19 +173,42 @@ function drawHands() {
       ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
       ctx.fill();
     }
+
+    // Pinch marker: ring while open, filled disc while pinching
+    if (hand.pinch) {
+      const { x, y, pinching } = hand.pinch;
+      ctx.beginPath();
+      ctx.arc(x, y, pinching ? 16 : 10, 0, Math.PI * 2);
+      if (pinching) {
+        ctx.fillStyle = '#ffffff';
+        ctx.fill();
+      } else {
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+    }
   }
 }
 
 function updateLab() {
   lab.hidden = !(state.labVisible && state.step === 'live');
   if (lab.hidden) return;
-  const hands = state.hands.length
-    ? state.hands.map((h) => `${h.label} ${h.score.toFixed(2)}`).join(' · ')
-    : 'none';
+
+  const handLines = state.hands.length
+    ? state.hands
+        .map((h) =>
+          h.pinch
+            ? `${h.label.padEnd(5)} ratio ${h.pinch.ratio.toFixed(2)} ${h.pinch.pinching ? 'PINCH' : '-'}`
+            : `${h.label} ?`
+        )
+        .join('\n')
+    : 'no hands';
+
   lab.textContent =
     `FPS ${state.fps} · detect ${state.detectMs.toFixed(1)} ms · ${state.delegate}\n` +
     `${state.trackerStatus}\n` +
-    `Hands: ${state.hands.length} (${hands})\n` +
+    `${handLines}\n` +
     `[L] hide`;
 }
 
