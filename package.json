@@ -1,0 +1,29 @@
+{
+  "name": "imageincam",
+  "version": "1.0.0",
+  "description": "Make photos appear on your cam with gestures",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jmond07/ImageInCam.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/jmond07/ImageInCam/issues"
+  },
+  "homepage": "https://github.com/jmond07/ImageInCam#readme",
+  "devDependencies": {
+    "electron": "^45.2.1",
+    "electron-builder": "^26.18.0"
+  },
+  "dependencies": {
+    "@mediapipe/tasks-vision": "^1.2.0"
+  }
+}
