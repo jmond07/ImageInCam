@@ -1,0 +1,14 @@
+:root {
+  --bg: #0f0f14;
+  --text: #eee;
+}
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, sans-serif;
+  display: grid;
+  place-items: center;
+}
