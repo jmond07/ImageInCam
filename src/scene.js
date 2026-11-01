@@ -36,6 +36,16 @@ export function createScene() {
       return rectOf(item, canvas);
     },
 
+    // Plain copy of the current state, for undo/redo
+    snapshot() {
+      return items.map((i) => ({ stamp: i.stamp, x: i.x, y: i.y, width: i.width }));
+    },
+
+    restore(snap) {
+      items.length = 0;
+      for (const s of snap) items.push({ ...s, held: false });
+    },
+
     add(stamp, px, py, canvas) {
       const item = {
         stamp,

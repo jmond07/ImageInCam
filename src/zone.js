@@ -208,7 +208,7 @@ export function createZone(canvas) {
       ctx.font = '600 15px system-ui, sans-serif';
       ctx.textAlign = 'center';
       ctx.fillText(
-        'Active zone · drag to move or resize · double-click to reset · Z to finish',
+        'Spawn zone · drag to move or resize · double-click to reset · Z to finish',
         x0 + w / 2,
         y0 + 30
       );

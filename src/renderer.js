@@ -9,6 +9,7 @@ import { loadStamps, MAX_STAMPS } from './stamps.js';
 import { createScene } from './scene.js';
 import { createInteraction } from './interaction.js';
 import { createZone } from './zone.js';
+import { createHistory } from './history.js';
 
 const WASM_PATH = new URL('./vendor/mediapipe/wasm', document.baseURI).href;
 const MODEL_PATH = new URL('./assets/hand_landmarker.task', document.baseURI).href;
@@ -70,7 +71,8 @@ function logEvent(message) {
 }
 
 const scene = createScene();
-const interaction = createInteraction(scene, logEvent);
+const history = createHistory(scene);
+const interaction = createInteraction(scene, logEvent, history);
 const clearGesture = createClearGesture();
 const deleteGesture = createDeleteGesture();
 const zone = createZone(canvas);
@@ -137,17 +139,51 @@ function toggleZoneEditor() {
   logEvent(on ? 'ZONE editing' : 'ZONE saved');
 }
 
+// ---------- Undo / redo / clear ----------
+function undoLast() {
+  interaction.releaseAll(); // let go of anything held first
+  resetGestureProgress();
+  logEvent(history.undo() ? 'UNDO' : 'UNDO (nothing to undo)');
+}
+
+function redoLast() {
+  interaction.releaseAll();
+  resetGestureProgress();
+  logEvent(history.redo() ? 'REDO' : 'REDO (nothing to redo)');
+}
+
+function clearAll(reason) {
+  history.record(() => {
+    interaction.releaseAll();
+    scene.clear();
+  });
+  logEvent(`CLEAR (${reason})`);
+}
+
 // ---------- Keyboard ----------
 window.addEventListener('keydown', (e) => {
   if (state.step === 'welcome') return goTo('camera');
   if (state.step !== 'live') return;
 
   const key = e.key.toLowerCase();
+
+  // Ctrl+Z undo, Ctrl+Shift+Z or Ctrl+Y redo
+  if (e.ctrlKey || e.metaKey) {
+    if (key === 'z') {
+      e.preventDefault();
+      if (e.shiftKey) redoLast();
+      else undoLast();
+    } else if (key === 'y') {
+      e.preventDefault();
+      redoLast();
+    }
+    return;
+  }
+
   if (key === 'l') {
     state.labVisible = !state.labVisible;
   } else if (key === 'c') {
-    interaction.releaseAll();
-    scene.clear();
+    clearAll('key C');
   } else if (key === 'p') {
     togglePause();
   } else if (key === 'z') {
@@ -319,16 +355,12 @@ function detect() {
     const clear = clearGesture.update(state.hands, interaction.holdingAny(), scene.count > 0, t0);
     state.clearProgress = clear.progress;
     state.clearAnchor = clear.anchor;
-    if (clear.triggered) {
-      interaction.releaseAll();
-      scene.clear();
-      logEvent('CLEAR (two open hands)');
-    }
+    if (clear.triggered) clearAll('two open hands');
 
     const del = deleteGesture.update(state.hands, scene, canvas, interaction.holdingAny(), t0);
     state.deleting = del;
     if (del.triggered) {
-      scene.remove(del.item);
+      history.record(() => scene.remove(del.item));
       logEvent('DELETE (pointed image)');
     }
   }
@@ -345,7 +377,7 @@ function drawHands() {
     // Hands outside the active zone (and not holding anything) are drawn faded
     const faded = !hand.active && !interaction.isHolding(hand.id);
     ctx.save();
-    ctx.globalAlpha = faded ? 0.35 : 1;
+    ctx.globalAlpha = faded ? 0.5 : 1;
 
     ctx.strokeStyle = color;
     ctx.lineWidth = 3;
@@ -475,7 +507,7 @@ function updateLab() {
     `${state.trackerStatus}\n` +
     `${handLines}\n` +
     `Stamp ${state.selected + 1}/${state.stamps.length} · placed ${scene.count}${size}\n` +
-    `[L] hide  [C] clear  [P] pause  [Z] zone\n` +
+    `[L] hide [C] clear [P] pause [Z] zone [Ctrl+Z/Y] undo/redo\n` +
     `--- events ---\n` +
     (state.events.length ? state.events.join('\n') : '(none yet)');
 }
@@ -504,6 +536,7 @@ function frame(now) {
   drawClearProgress();
   drawDeleteProgress();
   zone.draw(ctx); // only draws while the zone is being edited
+  history.tick(performance.now());
 
   frameCount++;
   if (now - lastFpsTime >= 500) {

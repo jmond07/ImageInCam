@@ -7,13 +7,19 @@ const RESIZE_GAIN = 0.6; // size change per palm of travel (exponential: 1 palm 
 const RESIZE_DEADZONE = 0.15; // palms around the starting height where nothing happens
 const RESIZE_SMOOTHING = 0.35; // 0..1, lower = steadier but slower to react
 
-export function createInteraction(scene, log = () => {}) {
-  const states = {}; // hand id -> { wasPinching, held, missingSince }
+export function createInteraction(scene, log = () => {}, history = null) {
+  const states = {}; // hand id -> { wasPinching, armed, zoneArmed, held, missingSince }
   let lastReleased = null; // { item, time, id, dx, dy } (shared between hands)
   let resize = null; // { handId, item, startWidth, startY, smoothY }
 
   const stateFor = (id) =>
-    (states[id] ??= { wasPinching: false, armed: false, held: null, missingSince: null });
+    (states[id] ??= {
+      wasPinching: false,
+      armed: false, // saw an open hand (anywhere): a new pinch may start
+      zoneArmed: false, // saw an open hand inside the active zone: a spawn may start
+      held: null,
+      missingSince: null,
+    });
   const tag = (id) => `H${id + 1}`;
 
   function release(id, s, now) {
@@ -21,6 +27,8 @@ export function createInteraction(scene, log = () => {}) {
     s.held.item.held = false;
     lastReleased = { item: s.held.item, time: now, id, dx: s.held.dx, dy: s.held.dy };
     s.held = null;
+    // Once nobody holds anything, the undo step can close
+    if (!Object.values(states).some((st) => st.held)) history?.end(now);
   }
 
   // offset: distance from the fingers to the image center. If not given, it's
@@ -58,7 +66,9 @@ export function createInteraction(scene, log = () => {}) {
   function updateResize(hands) {
     const holders = hands.filter((h) => states[h.id]?.held);
     const holder = holders.length === 1 ? holders[0] : null;
-    const clutchHand = holder ? hands.find((h) => h.id !== holder.id && h.pinch?.clutch && !h.shape.pointing) : null;
+    const clutchHand = holder
+      ? hands.find((h) => h.id !== holder.id && h.pinch?.clutch && !h.shape.pointing)
+      : null;
 
     if (!holder || !clutchHand) {
       if (resize) {
@@ -111,14 +121,22 @@ export function createInteraction(scene, log = () => {}) {
         const s = stateFor(id);
         const { x, y } = hand.pinch;
 
-        // A NEW pinch only counts if this hand showed an open hand inside the active
-        // zone first, and isn't pointing or cut off by the frame edge. A pinch that is
-        // already going is never cut, so you can still drag images out of the zone.
+        // A NEW pinch needs an open hand first (so a closed hand drifting in doesn't
+        // count) and can't start while pointing or with the hand cut off by the frame
+        // edge. A pinch that is already going is never cut. Grabbing works anywhere;
+        // spawning a new image needs the hand to be inside the active zone, having
+        // been open there.
         const raw = hand.pinch.pinching;
-        const eligible = hand.active && !hand.shape.pointing && !hand.shape.partial;
+        const eligible = !hand.shape.pointing && !hand.shape.partial;
         const pinching = raw && (s.wasPinching || s.armed);
-        if (!eligible) s.armed = false;
-        else if (!raw) s.armed = true;
+        const canSpawn = hand.active && s.zoneArmed;
+        if (!eligible) {
+          s.armed = false;
+          s.zoneArmed = false;
+        } else if (!raw) {
+          s.armed = true;
+          s.zoneArmed = hand.active;
+        }
 
         if (s.missingSince !== null) {
           log(`${tag(id)} BACK after ${Math.round(now - s.missingSince)}ms`);
@@ -137,19 +155,24 @@ export function createInteraction(scene, log = () => {}) {
 
           if (hit) {
             if (!hit.held) {
+              history?.begin();
               grab(s, hit, x, y, canvas);
               log(`${tag(id)} GRAB`);
             }
           } else if (canRegrab) {
+            history?.begin();
             grab(s, recent.item, x, y, canvas, recent.offset);
             log(`${tag(id)} REGRAB ${Math.round(recent.dt)}ms ${Math.round(recent.d)}px`);
-          } else if (stamp) {
+          } else if (stamp && canSpawn) {
+            history?.begin(); // snapshot BEFORE the new image exists
             grab(s, scene.add(stamp, x, y, canvas), x, y, canvas);
             log(
               recent
                 ? `${tag(id)} SPAWN (released ${Math.round(recent.dt)}ms ago, ${Math.round(recent.d)}px away)`
                 : `${tag(id)} SPAWN`
             );
+          } else if (stamp) {
+            log(`${tag(id)} NO SPAWN (outside the zone, or hand wasn't open there)`);
           }
         }
 
@@ -175,6 +198,8 @@ export function createInteraction(scene, log = () => {}) {
           if (s.held) log(`${tag(id)} RELEASE lost`);
           release(id, s, now);
           s.wasPinching = false;
+          s.armed = false;
+          s.zoneArmed = false;
           s.missingSince = null;
         } else if (s.held && s.missingSince === null) {
           s.missingSince = now;
