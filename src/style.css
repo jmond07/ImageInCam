@@ -137,3 +137,16 @@ p  { margin: 0 0 1rem; font-size: 0.9rem; line-height: 1.4; }
   color: #fff;
   text-shadow: 0 0 3px #000;
 }
+
+/* Pause badge */
+.badge {
+  position: fixed;
+  top: 8px;
+  right: 8px;
+  padding: 6px 10px;
+  font: 12px/1.2 ui-monospace, Consolas, monospace;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.6);
+  border-radius: 6px;
+  pointer-events: none;
+}

@@ -1,5 +1,7 @@
 const MAX_ITEMS = 40;
 const DEFAULT_WIDTH = 0.18; // image width as a fraction of canvas width
+const MIN_WIDTH = 0.04;
+const MAX_WIDTH = 0.9;
 
 export function createScene() {
   const items = []; // back to front
@@ -49,6 +51,11 @@ export function createScene() {
     moveTo(item, px, py, canvas) {
       item.x = Math.min(1, Math.max(0, px / canvas.width));
       item.y = Math.min(1, Math.max(0, py / canvas.height));
+    },
+
+    // factor > 1 grows the image, < 1 shrinks it (around its center)
+    scaleBy(item, factor) {
+      item.width = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, item.width * factor));
     },
 
     bringToFront(item) {

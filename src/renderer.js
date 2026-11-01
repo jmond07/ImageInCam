@@ -1,6 +1,9 @@
 import { FilesetResolver, HandLandmarker } from './vendor/mediapipe/vision_bundle.mjs';
 import { createPinchTracker } from './gestures/pinch.js';
 import { createHandIds } from './gestures/hand-ids.js';
+import { measureHand } from './gestures/hand-shape.js';
+import { createMotionTracker } from './gestures/motion.js';
+import { createClearGesture } from './gestures/clear-gesture.js';
 import { loadStamps, MAX_STAMPS } from './stamps.js';
 import { createScene } from './scene.js';
 import { createInteraction } from './interaction.js';
@@ -18,6 +21,7 @@ const canvas = document.getElementById('stage');
 const ctx = canvas.getContext('2d');
 const lab = document.getElementById('lab');
 const hud = document.getElementById('hud');
+const badge = document.getElementById('badge');
 
 const allowBtn = document.getElementById('allow-camera');
 const cameraError = document.getElementById('camera-error');
@@ -43,10 +47,13 @@ const state = {
   tracker: null,
   trackerStatus: 'Not loaded',
   delegate: '-',
-  hands: [], // [{ id, points, label, score, pinch }]
+  hands: [], // [{ id, points, label, score, shape, motion, pinch }]
   detectMs: 0,
   fps: 0,
   labVisible: true,
+  paused: false,
+  clearProgress: 0,
+  clearAnchor: null,
   events: [], // last gesture events, shown in the lab and logged to the console
 };
 
@@ -61,10 +68,12 @@ function logEvent(message) {
 
 const scene = createScene();
 const interaction = createInteraction(scene, logEvent);
+const clearGesture = createClearGesture();
 
 // Hands are tracked by stable id (0 or 1), not by MediaPipe's label
 const handIds = createHandIds();
 const pinchTrackers = [createPinchTracker(), createPinchTracker()];
+const motionTrackers = [createMotionTracker(), createMotionTracker()];
 
 // MediaPipe's handedness comes out inverted in our setup (tested: raising the
 // left hand reports "Right"). Only used for display now, since it also flips
@@ -84,6 +93,28 @@ function goTo(step) {
   hud.hidden = step !== 'live';
 }
 
+// ---------- Pause ----------
+function resetTracking() {
+  state.hands = [];
+  state.clearProgress = 0;
+  state.clearAnchor = null;
+  handIds.reset();
+  pinchTrackers.forEach((t) => t.reset());
+  motionTrackers.forEach((t) => t.reset());
+}
+
+function togglePause() {
+  state.paused = !state.paused;
+  badge.hidden = !state.paused;
+  if (state.paused) {
+    interaction.releaseAll(); // let go of whatever was held; placed images stay
+    resetTracking();
+    logEvent('PAUSED');
+  } else {
+    logEvent('RESUMED');
+  }
+}
+
 // ---------- Keyboard ----------
 window.addEventListener('keydown', (e) => {
   if (state.step === 'welcome') return goTo('camera');
@@ -95,6 +126,8 @@ window.addEventListener('keydown', (e) => {
   } else if (key === 'c') {
     interaction.releaseAll();
     scene.clear();
+  } else if (key === 'p') {
+    togglePause();
   } else if (/^[1-9]$/.test(key)) {
     selectStamp(Number(key) - 1);
   }
@@ -189,11 +222,9 @@ async function loadTracker() {
           baseOptions: { modelAssetPath: MODEL_PATH, delegate },
           runningMode: 'VIDEO',
           numHands: 2,
-          // Slightly more tolerant than the 0.5 defaults, so fast hands are
-          // followed instead of being dropped and re-detected
           minHandDetectionConfidence: 0.5,
-          minHandPresenceConfidence: 0.4,
-          minTrackingConfidence: 0.4,
+          minHandPresenceConfidence: 0.5,
+          minTrackingConfidence: 0.5,
         });
         state.delegate = delegate;
         state.trackerStatus = 'Tracking ready';
@@ -234,18 +265,24 @@ function detect() {
     const id = ids[i];
     if (id === null) return;
     const category = result.handedness[i]?.[0];
+    const shape = measureHand(points, canvas.width, canvas.height);
     state.hands.push({
       id,
       points,
       label: fixHandLabel(category?.categoryName),
       score: category?.score ?? 0,
+      shape,
+      motion: motionTrackers[id].update(shape, t0),
       pinch: pinchTrackers[id].update(points, canvas.width, canvas.height, t0),
     });
   });
 
-  // Ids that expired lose their pinch state
+  // Ids that expired lose their state
   pinchTrackers.forEach((tracker, id) => {
-    if (!handIds.isActive(id)) tracker.reset();
+    if (!handIds.isActive(id)) {
+      tracker.reset();
+      motionTrackers[id].reset();
+    }
   });
 
   // Gestures only act once we're in the live view
@@ -253,6 +290,15 @@ function detect() {
     interaction.update(state.hands, canvas, state.stamps[state.selected], t0, (id) =>
       handIds.isActive(id)
     );
+
+    const clear = clearGesture.update(state.hands, interaction.holdingAny(), scene.count > 0, t0);
+    state.clearProgress = clear.progress;
+    state.clearAnchor = clear.anchor;
+    if (clear.triggered) {
+      interaction.releaseAll();
+      scene.clear();
+      logEvent('CLEAR (two open hands)');
+    }
   }
 }
 
@@ -298,6 +344,30 @@ function drawHands() {
   }
 }
 
+// Progress ring for the "clear all" gesture (drawn even when the lab is hidden)
+function drawClearProgress() {
+  if (state.clearProgress <= 0 || !state.clearAnchor) return;
+  const { x, y } = state.clearAnchor;
+  const r = 36;
+
+  ctx.lineWidth = 6;
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.stroke();
+
+  ctx.strokeStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.arc(x, y, r, -Math.PI / 2, -Math.PI / 2 + state.clearProgress * Math.PI * 2);
+  ctx.stroke();
+
+  ctx.fillStyle = '#ffffff';
+  ctx.font = '600 14px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('Clearing…', x, y + r + 22);
+}
+
 function updateLab() {
   lab.hidden = !(state.labVisible && state.step === 'live');
   if (lab.hidden) return;
@@ -306,18 +376,20 @@ function updateLab() {
     ? state.hands
         .map((h) =>
           h.pinch
-            ? `H${h.id + 1} ${h.label.padEnd(5)} ratio ${h.pinch.ratio.toFixed(2)} ${h.pinch.pinching ? 'PINCH' : '-'}`
+            ? `H${h.id + 1} ${h.label.padEnd(5)} r ${h.pinch.ratio.toFixed(2)} ${h.pinch.pinching ? 'PINCH' : '-    '} open ${h.shape.openness.toFixed(1)} v${h.motion.speed.toFixed(1)}`
             : `H${h.id + 1} ${h.label} ?`
         )
         .join('\n')
-    : 'no hands';
+    : state.paused
+      ? 'paused'
+      : 'no hands';
 
   lab.textContent =
     `FPS ${state.fps} · detect ${state.detectMs.toFixed(1)} ms · ${state.delegate}\n` +
     `${state.trackerStatus}\n` +
     `${handLines}\n` +
     `Stamp ${state.selected + 1}/${state.stamps.length} · placed ${scene.count}\n` +
-    `[L] hide  [C] clear\n` +
+    `[L] hide  [C] clear  [P] pause\n` +
     `--- events ---\n` +
     (state.events.length ? state.events.join('\n') : '(none yet)');
 }
@@ -335,7 +407,7 @@ function frame(now) {
   ctx.restore();
 
   // 2. Detect when the camera delivered a new frame (it uses its own small canvas)
-  if (state.tracker && video.currentTime !== lastVideoTime) {
+  if (state.tracker && !state.paused && video.currentTime !== lastVideoTime) {
     lastVideoTime = video.currentTime;
     detect();
   }
@@ -343,6 +415,7 @@ function frame(now) {
   // 3. Placed images, then the skeleton on top (skeleton only while the lab is on)
   if (state.step === 'live') scene.draw(ctx, canvas);
   if (state.labVisible) drawHands();
+  drawClearProgress();
 
   frameCount++;
   if (now - lastFpsTime >= 500) {

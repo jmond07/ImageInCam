@@ -62,5 +62,11 @@ export function createHandIds() {
     isActive(id) {
       return slots[id] !== null;
     },
+
+        // Forget all hands (used when tracking is paused)
+    reset() {
+      slots[0] = null;
+      slots[1] = null;
+    },
   };
 }

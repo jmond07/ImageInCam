@@ -53,6 +53,10 @@ export function createInteraction(scene, log = () => {}) {
       return !!states[id]?.held;
     },
 
+    holdingAny() {
+      return Object.values(states).some((s) => s.held);
+    },
+
     // hands: state.hands. stamp: the selected stamp. now: ms. isActive(id): hand slot still alive.
     update(hands, canvas, stamp, now, isActive) {
       const present = new Set();
@@ -123,6 +127,18 @@ export function createInteraction(scene, log = () => {}) {
         } else if (s.held && s.missingSince === null) {
           s.missingSince = now;
           log(`${tag(id)} LOST while holding`);
+        }
+      }
+
+      // Conductor: a free hand moving up/down resizes the image the other hand holds
+      const holders = hands.filter((h) => states[h.id]?.held);
+      if (holders.length === 1) {
+        const item = states[holders[0].id].held.item;
+        const conductor = hands.find(
+          (h) => h.id !== holders[0].id && h.pinch && !h.pinch.pinching && h.motion
+        );
+        if (conductor && conductor.motion.factor !== 1) {
+          scene.scaleBy(item, conductor.motion.factor);
         }
       }
     },
