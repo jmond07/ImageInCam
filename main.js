@@ -1,4 +1,4 @@
-const { app, BrowserWindow, protocol, net } = require('electron');
+const { app, BrowserWindow, protocol, net, shell } = require('electron');
 const path = require('path');
 const { pathToFileURL } = require('url');
 
@@ -26,6 +26,14 @@ function createWindow() {
   });
 
   win.setAspectRatio(16 / 9);
+  // Links open in the real browser, and the app window never navigates away
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith('https://')) shell.openExternal(url);
+    return { action: 'deny' };
+  });
+  win.webContents.on('will-navigate', (event, url) => {
+    if (!url.startsWith('app://')) event.preventDefault();
+  });
   win.once('ready-to-show', () => win.show());
   win.loadURL('app://local/index.html');
 
