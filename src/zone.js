@@ -148,6 +148,12 @@ export function createZone(canvas) {
       if (!on) canvas.style.cursor = '';
     },
 
+    // Back to the default rectangle
+    reset() {
+      rect = { ...DEFAULT_RECT };
+      save();
+    },
+
     // Is this point (canvas px) inside the active zone?
     contains(x, y) {
       return (

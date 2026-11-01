@@ -150,3 +150,92 @@ p  { margin: 0 0 1rem; font-size: 0.9rem; line-height: 1.4; }
   border-radius: 6px;
   pointer-events: none;
 }
+
+/* Side menu */
+.menu-btn {
+  position: fixed;
+  top: 8px;
+  right: 8px;
+  z-index: 30;
+  width: 36px;
+  height: 36px;
+  font-size: 18px;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.55);
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: opacity 0.3s;
+}
+body.idle .menu-btn { opacity: 0; }
+
+.menu {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  width: min(280px, 85vw);
+  padding: 56px 14px 14px;
+  overflow-y: auto;
+  background: rgba(15, 15, 20, 0.94);
+  transform: translateX(100%);
+  visibility: hidden;
+  transition: transform 0.25s ease, visibility 0.25s;
+}
+.menu.open { transform: none; visibility: visible; }
+
+.menu h2 { margin: 0 0 12px; font-size: 1.1rem; }
+.menu h3 {
+  margin: 16px 0 6px;
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.menu .item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  padding: 8px 10px;
+  margin-bottom: 4px;
+  font: inherit;
+  font-size: 0.9rem;
+  color: var(--text);
+  text-align: left;
+  background: rgba(255, 255, 255, 0.06);
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.menu .item:hover:not(:disabled) { background: rgba(255, 255, 255, 0.12); }
+.menu .item:disabled { opacity: 0.35; cursor: default; }
+.menu kbd { font: 11px ui-monospace, Consolas, monospace; color: var(--muted); }
+.menu .row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 10px;
+  font-size: 0.9rem;
+}
+.menu .seg { display: flex; gap: 4px; }
+.menu .seg button {
+  width: 32px;
+  padding: 4px 0;
+  font: inherit;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.08);
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.menu .seg button.on { background: var(--accent); }
+.menu .note { margin: 6px 10px; font-size: 0.75rem; line-height: 1.4; color: var(--muted); }
+.menu .about { margin-top: 10px; padding: 0 10px; font-size: 0.85rem; }
+.menu .about summary { cursor: pointer; padding: 6px 0; }
+.menu .about p { margin: 0 0 8px; line-height: 1.4; }
+.menu a { color: var(--text); }
+
+/* The pause/hidden badge moves left to make room for the menu button */
+.badge { right: 54px; }

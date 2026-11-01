@@ -105,6 +105,18 @@ export function createInteraction(scene, log = () => {}, history = null) {
       return Object.values(states).some((s) => s.held);
     },
 
+    // Scales every image being held (mouse wheel). Returns true if anything changed.
+    scaleHeld(factor) {
+      let changed = false;
+      for (const s of Object.values(states)) {
+        if (s.held) {
+          scene.setWidth(s.held.item, s.held.item.width * factor);
+          changed = true;
+        }
+      }
+      return changed;
+    },
+
     // Width (fraction of canvas) of the image being resized, or null
     get resizeWidth() {
       return resize ? resize.item.width : null;

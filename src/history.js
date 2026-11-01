@@ -57,6 +57,14 @@ export function createHistory(scene, { limit = 30, settleMs = 500 } = {}) {
       return true;
     },
 
+    canUndo() {
+      return undos.length > 0 || pending !== null;
+    },
+
+    canRedo() {
+      return redos.length > 0;
+    },
+
     redo() {
       commit();
       const next = redos.pop();

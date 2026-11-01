@@ -10,6 +10,8 @@ import { createScene } from './scene.js';
 import { createInteraction } from './interaction.js';
 import { createZone } from './zone.js';
 import { createHistory } from './history.js';
+import { createMenu } from './menu.js';
+import { loadSettings, saveSettings, DEFAULT_SETTINGS } from './settings.js';
 
 const WASM_PATH = new URL('./vendor/mediapipe/wasm', document.baseURI).href;
 const MODEL_PATH = new URL('./assets/hand_landmarker.task', document.baseURI).href;
@@ -25,6 +27,7 @@ const ctx = canvas.getContext('2d');
 const lab = document.getElementById('lab');
 const hud = document.getElementById('hud');
 const badge = document.getElementById('badge');
+const menuBtn = document.getElementById('menu-btn');
 
 const allowBtn = document.getElementById('allow-camera');
 const cameraError = document.getElementById('camera-error');
@@ -33,13 +36,16 @@ const pickBtn = document.getElementById('pick-files');
 const fileCount = document.getElementById('file-count');
 const startBtn = document.getElementById('start');
 
-// Detection runs on its own small mirrored copy of the camera frame
+// Detection runs on its own small copy of the camera frame
 const DETECT_W = 640;
 const DETECT_H = 360;
 const detectCanvas = document.createElement('canvas');
 detectCanvas.width = DETECT_W;
 detectCanvas.height = DETECT_H;
 const detectCtx = detectCanvas.getContext('2d');
+
+// Persistent settings (hands in use, mirror, debug overlay)
+const settings = loadSettings();
 
 const state = {
   step: 'welcome',
@@ -53,8 +59,8 @@ const state = {
   hands: [], // [{ id, points, label, score, shape, motion, pinch, active }]
   detectMs: 0,
   fps: 0,
-  labVisible: true,
   paused: false,
+  imagesHidden: false,
   clearProgress: 0,
   clearAnchor: null,
   deleting: { item: null, progress: 0 },
@@ -98,9 +104,11 @@ function goTo(step) {
     el.classList.toggle('active', name === step);
   }
   hud.hidden = step !== 'live';
+  menuBtn.hidden = step !== 'live';
+  if (step !== 'live') menu.close();
 }
 
-// ---------- Pause ----------
+// ---------- Tracking state ----------
 function resetGestureProgress() {
   state.clearProgress = 0;
   state.clearAnchor = null;
@@ -116,9 +124,18 @@ function resetTracking() {
   motionTrackers.forEach((t) => t.reset());
 }
 
+// ---------- Badge (paused / hidden) ----------
+function updateBadge() {
+  const parts = [];
+  if (state.paused) parts.push('Tracking paused · P to resume');
+  if (state.imagesHidden) parts.push('Images hidden · H to show');
+  badge.textContent = parts.join('  |  ');
+  badge.hidden = parts.length === 0;
+}
+
 function togglePause() {
   state.paused = !state.paused;
-  badge.hidden = !state.paused;
+  updateBadge();
   if (state.paused) {
     interaction.releaseAll(); // let go of whatever was held; placed images stay
     resetTracking();
@@ -128,31 +145,99 @@ function togglePause() {
   }
 }
 
+// Hides all placed images without touching them; they come back in the same place
+function toggleHidden() {
+  state.imagesHidden = !state.imagesHidden;
+  if (state.imagesHidden) {
+    interaction.releaseAll();
+    resetGestureProgress();
+  }
+  updateBadge();
+  logEvent(state.imagesHidden ? 'IMAGES hidden' : 'IMAGES shown');
+}
+
 // ---------- Active zone editor ----------
 function toggleZoneEditor() {
   const on = !zone.editing;
   zone.setEditing(on);
   if (on) {
+    menu.close(); // so the menu doesn't cover the canvas
     interaction.releaseAll(); // gestures are off while editing
     resetGestureProgress();
   }
   logEvent(on ? 'ZONE editing' : 'ZONE saved');
 }
 
+// ---------- Settings ----------
+function toggleLab() {
+  settings.lab = !settings.lab;
+  saveSettings(settings);
+}
+
+function toggleMirror() {
+  settings.mirror = !settings.mirror;
+  saveSettings(settings);
+  interaction.releaseAll();
+  resetTracking();
+  logEvent(`MIRROR ${settings.mirror ? 'on' : 'off'}`);
+}
+
+// Pushes settings.hands into the tracker (rebuilds it if it can't be changed live)
+async function applyHands() {
+  if (!state.tracker) return; // loadTracker will read settings.hands when it's ready
+  try {
+    await state.tracker.setOptions({ numHands: settings.hands });
+  } catch (err) {
+    console.warn('setOptions failed, rebuilding the tracker:', err);
+    state.tracker.close?.();
+    state.tracker = null;
+    await loadTracker();
+  }
+}
+
+async function setHands(n) {
+  settings.hands = n;
+  saveSettings(settings);
+  interaction.releaseAll();
+  resetTracking();
+  logEvent(`HANDS ${n}`);
+  await applyHands();
+}
+
+async function resetSettings() {
+  const mirrorChanged = settings.mirror !== DEFAULT_SETTINGS.mirror;
+  Object.assign(settings, DEFAULT_SETTINGS);
+  saveSettings(settings);
+  zone.reset();
+  interaction.releaseAll();
+  if (mirrorChanged) resetTracking();
+  logEvent('SETTINGS reset');
+  await applyHands();
+}
+
 // ---------- Undo / redo / clear ----------
+// While images are hidden these would change things you can't see
+function imagesVisible() {
+  if (state.imagesHidden) logEvent('Images are hidden: press H to show them first');
+  return !state.imagesHidden;
+}
+
 function undoLast() {
+  if (!imagesVisible()) return;
   interaction.releaseAll(); // let go of anything held first
   resetGestureProgress();
   logEvent(history.undo() ? 'UNDO' : 'UNDO (nothing to undo)');
 }
 
 function redoLast() {
+  if (!imagesVisible()) return;
   interaction.releaseAll();
   resetGestureProgress();
   logEvent(history.redo() ? 'REDO' : 'REDO (nothing to redo)');
 }
 
 function clearAll(reason) {
+  if (!imagesVisible()) return;
   history.record(() => {
     interaction.releaseAll();
     scene.clear();
@@ -160,7 +245,39 @@ function clearAll(reason) {
   logEvent(`CLEAR (${reason})`);
 }
 
-// ---------- Keyboard ----------
+// ---------- Menu ----------
+function getMenuView() {
+  return {
+    canUndo: history.canUndo(),
+    canRedo: history.canRedo(),
+    hasImages: scene.count > 0,
+    hidden: state.imagesHidden,
+    paused: state.paused,
+    zoneEditing: zone.editing,
+    hands: settings.hands,
+    mirror: settings.mirror,
+    lab: settings.lab,
+  };
+}
+
+const menu = createMenu(
+  {
+    undo: undoLast,
+    redo: redoLast,
+    toggleHidden,
+    clearAll: () => clearAll('menu'),
+    togglePause,
+    toggleZone: toggleZoneEditor,
+    hands1: () => setHands(1),
+    hands2: () => setHands(2),
+    toggleMirror,
+    toggleLab,
+    resetSettings,
+  },
+  getMenuView
+);
+
+// ---------- Keyboard and mouse ----------
 window.addEventListener('keydown', (e) => {
   if (state.step === 'welcome') return goTo('camera');
   if (state.step !== 'live') return;
@@ -180,18 +297,26 @@ window.addEventListener('keydown', (e) => {
     return;
   }
 
-  if (key === 'l') {
-    state.labVisible = !state.labVisible;
-  } else if (key === 'c') {
-    clearAll('key C');
-  } else if (key === 'p') {
-    togglePause();
-  } else if (key === 'z') {
-    toggleZoneEditor();
-  } else if (/^[1-9]$/.test(key)) {
-    selectStamp(Number(key) - 1);
-  }
+  if (key === 'l') toggleLab();
+  else if (key === 'c') clearAll('key C');
+  else if (key === 'p') togglePause();
+  else if (key === 'h') toggleHidden();
+  else if (key === 'z') toggleZoneEditor();
+  else if (key === 'm') menu.toggle();
+  else if (key === 'escape') menu.close();
+  else if (/^[1-9]$/.test(key)) selectStamp(Number(key) - 1);
 });
+
+// Mouse wheel resizes whatever is being held (handy in 1-hand mode)
+canvas.addEventListener(
+  'wheel',
+  (e) => {
+    if (state.step !== 'live' || state.imagesHidden) return;
+    e.preventDefault();
+    interaction.scaleHeld(e.deltaY < 0 ? 1.08 : 1 / 1.08);
+  },
+  { passive: false }
+);
 
 // ---------- HUD ----------
 function drawThumb(thumb, stamp) {
@@ -271,6 +396,18 @@ async function startCamera() {
 }
 allowBtn.addEventListener('click', startCamera);
 
+// Draws the camera onto a canvas, mirrored or not depending on the setting
+function drawVideo(context, w, h) {
+  if (settings.mirror) {
+    context.save();
+    context.scale(-1, 1);
+    context.drawImage(video, -w, 0, w, h);
+    context.restore();
+  } else {
+    context.drawImage(video, 0, 0, w, h);
+  }
+}
+
 // ---------- Hand tracking ----------
 async function loadTracker() {
   state.trackerStatus = 'Loading hand tracking…';
@@ -281,7 +418,7 @@ async function loadTracker() {
         state.tracker = await HandLandmarker.createFromOptions(fileset, {
           baseOptions: { modelAssetPath: MODEL_PATH, delegate },
           runningMode: 'VIDEO',
-          numHands: 2,
+          numHands: settings.hands,
           minHandDetectionConfidence: 0.5,
           minHandPresenceConfidence: 0.5,
           minTrackingConfidence: 0.5,
@@ -303,12 +440,9 @@ async function loadTracker() {
 function detect() {
   const t0 = performance.now();
 
-  // Small mirrored copy of the camera frame: much cheaper than 1280x720, and
-  // landmarks are normalized so they still map onto the big canvas
-  detectCtx.save();
-  detectCtx.scale(-1, 1);
-  detectCtx.drawImage(video, -DETECT_W, 0, DETECT_W, DETECT_H);
-  detectCtx.restore();
+  // Small copy of the camera frame (mirrored like the big one): much cheaper than
+  // 1280x720, and landmarks are normalized so they still map onto the big canvas
+  drawVideo(detectCtx, DETECT_W, DETECT_H);
 
   const result = state.tracker.detectForVideo(detectCanvas, t0);
   state.detectMs = performance.now() - t0;
@@ -332,7 +466,7 @@ function detect() {
       label: fixHandLabel(category?.categoryName),
       score: category?.score ?? 0,
       shape,
-      active: zone.contains(shape.palmX, shape.palmY), // inside the active zone?
+      active: zone.contains(shape.palmX, shape.palmY), // inside the spawn zone?
       motion: motionTrackers[id].update(shape, t0),
       pinch: pinchTrackers[id].update(points, canvas.width, canvas.height, t0),
     });
@@ -346,8 +480,8 @@ function detect() {
     }
   });
 
-  // Gestures only act in the live view, and not while the zone is being edited
-  if (state.step === 'live' && !zone.editing) {
+  // Gestures only act in the live view, with images visible, and not while editing the zone
+  if (state.step === 'live' && !zone.editing && !state.imagesHidden) {
     interaction.update(state.hands, canvas, state.stamps[state.selected], t0, (id) =>
       handIds.isActive(id)
     );
@@ -374,7 +508,7 @@ function drawHands() {
     const color = HAND_COLORS[hand.id] ?? '#ffffff';
     const pts = hand.points.map((p) => ({ x: p.x * canvas.width, y: p.y * canvas.height }));
 
-    // Hands outside the active zone (and not holding anything) are drawn faded
+    // Hands outside the spawn zone (and not holding anything) are drawn faded
     const faded = !hand.active && !interaction.isHolding(hand.id);
     ctx.save();
     ctx.globalAlpha = faded ? 0.5 : 1;
@@ -476,7 +610,7 @@ function drawDeleteProgress() {
 }
 
 function updateLab() {
-  lab.hidden = !(state.labVisible && state.step === 'live');
+  lab.hidden = !(settings.lab && state.step === 'live');
   if (lab.hidden) return;
 
   const handLines = state.hands.length
@@ -503,11 +637,11 @@ function updateLab() {
     interaction.resizeWidth !== null ? ` · resizing ${(interaction.resizeWidth * 100).toFixed(0)}%` : '';
 
   lab.textContent =
-    `FPS ${state.fps} · detect ${state.detectMs.toFixed(1)} ms · ${state.delegate}\n` +
+    `FPS ${state.fps} · detect ${state.detectMs.toFixed(1)} ms · ${state.delegate} · ${settings.hands} hand${settings.hands === 1 ? '' : 's'}\n` +
     `${state.trackerStatus}\n` +
     `${handLines}\n` +
     `Stamp ${state.selected + 1}/${state.stamps.length} · placed ${scene.count}${size}\n` +
-    `[L] hide [C] clear [P] pause [Z] zone [Ctrl+Z/Y] undo/redo\n` +
+    `[L] lab [C] clear [P] pause [Z] zone [H] hide [M] menu\n` +
     `--- events ---\n` +
     (state.events.length ? state.events.join('\n') : '(none yet)');
 }
@@ -516,13 +650,11 @@ function updateLab() {
 let lastVideoTime = -1;
 let frameCount = 0;
 let lastFpsTime = performance.now();
+let lastMenuSync = 0;
 
 function frame(now) {
-  // 1. Mirrored video
-  ctx.save();
-  ctx.scale(-1, 1);
-  ctx.drawImage(video, -canvas.width, 0, canvas.width, canvas.height);
-  ctx.restore();
+  // 1. Camera video
+  drawVideo(ctx, canvas.width, canvas.height);
 
   // 2. Detect when the camera delivered a new frame (it uses its own small canvas)
   if (state.tracker && !state.paused && video.currentTime !== lastVideoTime) {
@@ -531,8 +663,8 @@ function frame(now) {
   }
 
   // 3. Placed images, then the skeleton on top (skeleton only while the lab is on)
-  if (state.step === 'live') scene.draw(ctx, canvas);
-  if (state.labVisible) drawHands();
+  if (state.step === 'live' && !state.imagesHidden) scene.draw(ctx, canvas);
+  if (settings.lab) drawHands();
   drawClearProgress();
   drawDeleteProgress();
   zone.draw(ctx); // only draws while the zone is being edited
@@ -545,6 +677,12 @@ function frame(now) {
     lastFpsTime = now;
   }
   updateLab();
+
+  // Keep the menu in line with the app while it's open (also reflects keyboard shortcuts)
+  if (menu.isOpen && now - lastMenuSync > 250) {
+    lastMenuSync = now;
+    menu.sync();
+  }
 
   requestAnimationFrame(frame);
 }

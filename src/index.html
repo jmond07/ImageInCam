@@ -38,6 +38,52 @@
     </div>
   </section>
 
+  <button id="menu-btn" class="menu-btn" aria-label="Menu" aria-expanded="false" hidden>☰</button>
+
+  <aside id="menu" class="menu" aria-hidden="true">
+    <h2>ImageInCam</h2>
+
+    <section>
+      <h3>Images</h3>
+      <button class="item" id="m-undo" data-action="undo"><span>Undo</span><kbd>Ctrl+Z</kbd></button>
+      <button class="item" id="m-redo" data-action="redo"><span>Redo</span><kbd>Ctrl+Y</kbd></button>
+      <button class="item" id="m-hide" data-action="toggleHidden"><span id="m-hide-label">Hide images</span><kbd>H</kbd></button>
+      <button class="item" id="m-clear" data-action="clearAll"><span>Clear all</span><kbd>C</kbd></button>
+    </section>
+
+    <section>
+      <h3>Tracking</h3>
+      <button class="item" id="m-pause" data-action="togglePause"><span id="m-pause-label">Pause tracking</span><kbd>P</kbd></button>
+      <button class="item" id="m-zone" data-action="toggleZone"><span id="m-zone-label">Edit spawn zone</span><kbd>Z</kbd></button>
+      <div class="row">
+        <span>Hands in use</span>
+        <div class="seg">
+          <button id="m-hands1" data-action="hands1">1</button>
+          <button id="m-hands2" data-action="hands2">2</button>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h3>View</h3>
+      <label class="row"><span>Mirror camera</span><input id="m-mirror" type="checkbox" data-action="toggleMirror"></label>
+      <label class="row"><span>Debug overlay</span><input id="m-lab" type="checkbox" data-action="toggleLab"></label>
+      <p class="note">Turn the mirror off when streaming, so viewers see you the right way round.</p>
+    </section>
+
+    <section>
+      <h3>App</h3>
+      <button class="item" data-action="resetSettings"><span>Reset settings</span></button>
+      <details class="about">
+        <summary>About</summary>
+        <p>ImageInCam puts your images on your webcam and lets you move them with hand gestures. Everything runs on your computer; nothing is recorded or uploaded.</p>
+        <p>Built with Electron and MediaPipe. MIT License.</p>
+        <p><a href="https://github.com/jmond07/ImageInCam" target="_blank" rel="noopener">github.com/jmond07/ImageInCam</a></p>
+        <p class="note">1-9 pick image · mouse wheel resizes the held image · M menu · L overlay</p>
+      </details>
+    </section>
+  </aside>
+
   <script type="module" src="renderer.js"></script>
 </body>
 </html>
