@@ -11,7 +11,7 @@
   "build": {
     "appId": "com.jmond07.imageincam",
     "productName": "ImageInCam",
-    "files": ["main.js", "package.json", "src/**/*"],
+    "files": ["main.js", "preload.js", "package.json", "src/**/*"],
     "win": { "target": "nsis" },
     "nsis": { "oneClick": false, "allowToChangeInstallationDirectory": true }
   },

@@ -5,7 +5,13 @@ import { measureHand } from './gestures/hand-shape.js';
 import { createMotionTracker } from './gestures/motion.js';
 import { createClearGesture } from './gestures/clear-gesture.js';
 import { createDeleteGesture } from './gestures/delete-gesture.js';
-import { loadStamps, MAX_STAMPS } from './stamps.js';
+import {
+  addStamps,
+  loadSavedStamps,
+  deleteSavedStamp,
+  drawStampThumb,
+  MAX_STAMPS,
+} from './stamps.js';
 import { createScene } from './scene.js';
 import { createInteraction } from './interaction.js';
 import { createZone } from './zone.js';
@@ -28,6 +34,10 @@ const lab = document.getElementById('lab');
 const hud = document.getElementById('hud');
 const badge = document.getElementById('badge');
 const menuBtn = document.getElementById('menu-btn');
+const addInput = document.getElementById('add-input');
+const quitModal = document.getElementById('quit-modal');
+const quitStay = document.getElementById('quit-stay');
+const quitConfirm = document.getElementById('quit-confirm');
 
 const allowBtn = document.getElementById('allow-camera');
 const cameraError = document.getElementById('camera-error');
@@ -50,8 +60,8 @@ const settings = loadSettings();
 const state = {
   step: 'welcome',
   stream: null,
-  files: [],
-  stamps: [], // resized images ready to use
+  files: [], // files picked in the start screen, not yet added to the library
+  stamps: [], // the library: resized images ready to use (max 9)
   selected: 0, // index of the active stamp
   tracker: null,
   trackerStatus: 'Not loaded',
@@ -61,6 +71,7 @@ const state = {
   fps: 0,
   paused: false,
   imagesHidden: false,
+  quitOpen: false,
   clearProgress: 0,
   clearAnchor: null,
   deleting: { item: null, progress: 0 },
@@ -103,9 +114,11 @@ function goTo(step) {
   for (const [name, el] of Object.entries(screens)) {
     el.classList.toggle('active', name === step);
   }
-  hud.hidden = step !== 'live';
+  syncHudVisibility();
   menuBtn.hidden = step !== 'live';
   if (step !== 'live') menu.close();
+  // Closing the window only asks for confirmation while the live view is open
+  window.api?.setConfirmClose(step === 'live');
 }
 
 // ---------- Tracking state ----------
@@ -245,12 +258,36 @@ function clearAll(reason) {
   logEvent(`CLEAR (${reason})`);
 }
 
+// ---------- Quit confirmation ----------
+function showQuitConfirm() {
+  if (state.step !== 'live') {
+    window.api?.quit(); // nothing to lose outside the live view
+    return;
+  }
+  interaction.releaseAll();
+  resetGestureProgress();
+  menu.close();
+  state.quitOpen = true;
+  quitModal.hidden = false;
+  quitStay.focus();
+}
+
+function hideQuitConfirm() {
+  state.quitOpen = false;
+  quitModal.hidden = true;
+}
+
+quitStay.addEventListener('click', hideQuitConfirm);
+quitConfirm.addEventListener('click', () => window.api?.quit());
+window.api?.onCloseRequested(showQuitConfirm);
+
 // ---------- Menu ----------
 function getMenuView() {
   return {
     canUndo: history.canUndo(),
     canRedo: history.canRedo(),
     hasImages: scene.count > 0,
+    libraryFull: state.stamps.length >= MAX_STAMPS,
     hidden: state.imagesHidden,
     paused: state.paused,
     zoneEditing: zone.editing,
@@ -266,6 +303,7 @@ const menu = createMenu(
     redo: redoLast,
     toggleHidden,
     clearAll: () => clearAll('menu'),
+    addImages: () => addInput.click(),
     togglePause,
     toggleZone: toggleZoneEditor,
     hands1: () => setHands(1),
@@ -280,6 +318,12 @@ const menu = createMenu(
 // ---------- Keyboard and mouse ----------
 window.addEventListener('keydown', (e) => {
   if (state.step === 'welcome') return goTo('camera');
+
+  // While the quit dialog is open, only Esc does anything (buttons work natively)
+  if (state.quitOpen) {
+    if (e.key === 'Escape') hideQuitConfirm();
+    return;
+  }
   if (state.step !== 'live') return;
 
   const key = e.key.toLowerCase();
@@ -311,7 +355,7 @@ window.addEventListener('keydown', (e) => {
 canvas.addEventListener(
   'wheel',
   (e) => {
-    if (state.step !== 'live' || state.imagesHidden) return;
+    if (state.step !== 'live' || state.imagesHidden || state.quitOpen) return;
     e.preventDefault();
     interaction.scaleHeld(e.deltaY < 0 ? 1.08 : 1 / 1.08);
   },
@@ -319,12 +363,8 @@ canvas.addEventListener(
 );
 
 // ---------- HUD ----------
-function drawThumb(thumb, stamp) {
-  const g = thumb.getContext('2d');
-  const k = Math.min(thumb.width / stamp.width, thumb.height / stamp.height);
-  const w = stamp.width * k;
-  const h = stamp.height * k;
-  g.drawImage(stamp.image, (thumb.width - w) / 2, (thumb.height - h) / 2, w, h);
+function syncHudVisibility() {
+  hud.hidden = state.step !== 'live' || state.stamps.length === 0;
 }
 
 function buildHud() {
@@ -332,10 +372,12 @@ function buildHud() {
   state.stamps.forEach((stamp, i) => {
     const slot = document.createElement('div');
     slot.className = 'slot';
+    slot.title = stamp.name;
+    slot.addEventListener('click', () => selectStamp(i));
 
     const thumb = document.createElement('canvas');
     thumb.width = thumb.height = 88; // drawn at 2x, shown at 44px
-    drawThumb(thumb, stamp);
+    drawStampThumb(thumb, stamp);
 
     const key = document.createElement('span');
     key.className = 'key';
@@ -345,6 +387,7 @@ function buildHud() {
     hud.append(slot);
   });
   updateHud();
+  syncHudVisibility();
 }
 
 function updateHud() {
@@ -359,6 +402,65 @@ function selectStamp(index) {
     updateHud();
   }
 }
+
+// ---------- Library (saved images) ----------
+// What the start screen says about saved and newly picked images
+function refreshPickerText() {
+  const saved = state.stamps.length;
+  const picked = state.files.length;
+  const room = Math.max(0, MAX_STAMPS - saved);
+
+  const parts = [];
+  if (saved) parts.push(`${saved} saved`);
+  if (picked) {
+    parts.push(`${picked} new selected${picked > room ? ` (only ${room} will fit)` : ''}`);
+  }
+  fileCount.textContent = parts.join(' · ');
+  startBtn.disabled = saved + Math.min(picked, room) === 0;
+}
+
+// Redraws everything that shows the library
+function refreshLibraryUi() {
+  state.selected = Math.min(state.selected, Math.max(0, state.stamps.length - 1));
+  buildHud();
+  menu.renderLibrary(state.stamps, removeStamp);
+  refreshPickerText();
+}
+
+// Adds files to the library (resized and saved), up to MAX_STAMPS in total
+async function addFiles(files) {
+  const list = [...files];
+  if (!list.length) return;
+
+  const room = MAX_STAMPS - state.stamps.length;
+  if (room <= 0) {
+    logEvent(`LIBRARY full (max ${MAX_STAMPS})`);
+    return;
+  }
+  const added = await addStamps(list.slice(0, room));
+  state.stamps.push(...added);
+  refreshLibraryUi();
+  logEvent(`LIBRARY +${added.length}`);
+}
+
+// Removes a saved image. Copies already placed on screen stay.
+async function removeStamp(stamp) {
+  await deleteSavedStamp(stamp);
+  state.stamps = state.stamps.filter((s) => s !== stamp);
+  refreshLibraryUi();
+  logEvent(`LIBRARY removed ${stamp.name}`);
+}
+
+addInput.addEventListener('change', async () => {
+  await addFiles(addInput.files);
+  addInput.value = '';
+});
+
+// Load the saved library as soon as the app opens
+const libraryLoading = loadSavedStamps().then((saved) => {
+  state.stamps = saved;
+  refreshLibraryUi();
+});
 
 // ---------- Camera ----------
 function cameraErrorMessage(err) {
@@ -480,8 +582,10 @@ function detect() {
     }
   });
 
-  // Gestures only act in the live view, with images visible, and not while editing the zone
-  if (state.step === 'live' && !zone.editing && !state.imagesHidden) {
+  // Gestures only act in the live view, with images visible, and not while a dialog
+  // or the zone editor is open
+  const gesturesOn = state.step === 'live' && !zone.editing && !state.imagesHidden && !state.quitOpen;
+  if (gesturesOn) {
     interaction.update(state.hands, canvas, state.stamps[state.selected], t0, (id) =>
       handIds.isActive(id)
     );
@@ -687,21 +791,22 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 
-// ---------- Image picker ----------
+// ---------- Start screen: picking images ----------
 pickBtn.addEventListener('click', () => fileInput.click());
 
 fileInput.addEventListener('change', () => {
   state.files = [...fileInput.files];
-  const n = state.files.length;
-  const extra = n > MAX_STAMPS ? ` (first ${MAX_STAMPS} will be used)` : '';
-  fileCount.textContent = n ? `${n} image${n === 1 ? '' : 's'} selected${extra}` : '';
-  startBtn.disabled = n === 0;
+  refreshPickerText();
 });
 
 startBtn.addEventListener('click', async () => {
   startBtn.disabled = true;
   startBtn.textContent = 'Loading…';
-  state.stamps = await loadStamps(state.files.slice(0, MAX_STAMPS));
+
+  await libraryLoading; // the saved library must be in before we add to it
+  await addFiles(state.files);
+  state.files = [];
+  fileInput.value = '';
   startBtn.textContent = 'Start';
 
   if (!state.stamps.length) {

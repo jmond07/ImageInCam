@@ -1,3 +1,5 @@
+import { drawStampThumb } from './stamps.js';
+
 // Side menu: wires the buttons to handlers and keeps their labels in sync with the app.
 // handlers: { [data-action]: () => void }. getView(): current app state for the menu.
 export function createMenu(handlers, getView) {
@@ -12,6 +14,7 @@ export function createMenu(handlers, getView) {
     $('m-undo').disabled = !v.canUndo || v.hidden;
     $('m-redo').disabled = !v.canRedo || v.hidden;
     $('m-clear').disabled = !v.hasImages || v.hidden;
+    $('m-add').disabled = v.libraryFull;
     $('m-hide-label').textContent = v.hidden ? 'Show images' : 'Hide images';
     $('m-pause-label').textContent = v.paused ? 'Resume tracking' : 'Pause tracking';
     $('m-zone-label').textContent = v.zoneEditing ? 'Finish editing zone' : 'Edit spawn zone';
@@ -19,6 +22,44 @@ export function createMenu(handlers, getView) {
     $('m-hands2').classList.toggle('on', v.hands === 2);
     $('m-mirror').checked = v.mirror;
     $('m-lab').checked = v.lab;
+  }
+
+  // The list of saved images, with a button to remove each one
+  function renderLibrary(stamps, onRemove) {
+    const list = $('m-library');
+    list.replaceChildren();
+
+    if (!stamps.length) {
+      const empty = document.createElement('p');
+      empty.className = 'empty';
+      empty.textContent = 'No saved images yet.';
+      list.append(empty);
+      return;
+    }
+
+    stamps.forEach((stamp, i) => {
+      const row = document.createElement('div');
+      row.className = 'entry';
+
+      const thumb = document.createElement('canvas');
+      thumb.width = thumb.height = 64; // drawn at 2x, shown at 32px
+      drawStampThumb(thumb, stamp);
+
+      const name = document.createElement('span');
+      name.className = 'name';
+      name.textContent = `${i + 1}. ${stamp.name}`;
+      name.title = stamp.name;
+
+      const remove = document.createElement('button');
+      remove.className = 'remove';
+      remove.textContent = '×';
+      remove.title = 'Remove from library';
+      remove.setAttribute('aria-label', `Remove ${stamp.name}`);
+      remove.addEventListener('click', () => onRemove(stamp));
+
+      row.append(thumb, name, remove);
+      list.append(row);
+    });
   }
 
   // The menu button fades out when the mouse has been still for a while
@@ -63,5 +104,6 @@ export function createMenu(handlers, getView) {
     close: () => setOpen(false),
     toggle: () => setOpen(!open),
     sync,
+    renderLibrary,
   };
 }

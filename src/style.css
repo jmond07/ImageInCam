@@ -239,3 +239,56 @@ body.idle .menu-btn { opacity: 0; }
 
 /* The pause/hidden badge moves left to make room for the menu button */
 .badge { right: 54px; }
+
+/* Clickable HUD slots */
+.slot { cursor: pointer; }
+
+/* Library list in the menu */
+.library { margin: 4px 0 8px; }
+.library .entry {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  font-size: 0.85rem;
+}
+.library canvas {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+}
+.library .name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.library .remove {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  font: inherit;
+  color: var(--text);
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.library .remove:hover { background: rgba(255, 255, 255, 0.12); }
+.library .empty { margin: 4px 10px; font-size: 0.8rem; color: var(--muted); }
+
+/* Quit confirmation */
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.6);
+}
+.modal[hidden] { display: none; }
+.modal .actions { display: flex; gap: 8px; }

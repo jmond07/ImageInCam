@@ -52,6 +52,14 @@
     </section>
 
     <section>
+      <h3>Library</h3>
+      <button class="item" id="m-add" data-action="addImages"><span>Add images…</span></button>
+      <div id="m-library" class="library"></div>
+      <input id="add-input" type="file" accept="image/*" multiple hidden>
+      <p class="note">Up to 9 images (keys 1-9). They're kept for next time.</p>
+    </section>
+
+    <section>
       <h3>Tracking</h3>
       <button class="item" id="m-pause" data-action="togglePause"><span id="m-pause-label">Pause tracking</span><kbd>P</kbd></button>
       <button class="item" id="m-zone" data-action="toggleZone"><span id="m-zone-label">Edit spawn zone</span><kbd>Z</kbd></button>
@@ -83,6 +91,17 @@
       </details>
     </section>
   </aside>
+
+  <div id="quit-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="quit-title" hidden>
+    <div class="card">
+      <h2 id="quit-title">Quit ImageInCam?</h2>
+      <p>The images you placed on screen will be cleared. Your saved library is kept.</p>
+      <div class="actions">
+        <button id="quit-stay" class="btn primary">Keep working</button>
+        <button id="quit-confirm" class="btn">Quit</button>
+      </div>
+    </div>
+  </div>
 
   <script type="module" src="renderer.js"></script>
 </body>
