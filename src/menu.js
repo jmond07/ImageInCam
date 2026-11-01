@@ -21,6 +21,7 @@ export function createMenu(handlers, getView) {
     $('m-hands1').classList.toggle('on', v.hands === 1);
     $('m-hands2').classList.toggle('on', v.hands === 2);
     $('m-mirror').checked = v.mirror;
+    $('m-skeleton').checked = v.skeleton;
     $('m-lab').checked = v.lab;
   }
 

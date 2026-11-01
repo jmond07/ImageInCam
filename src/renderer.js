@@ -18,6 +18,7 @@ import { createZone } from './zone.js';
 import { createHistory } from './history.js';
 import { createMenu } from './menu.js';
 import { loadSettings, saveSettings, DEFAULT_SETTINGS } from './settings.js';
+import { theme } from './theme.js';
 
 const WASM_PATH = new URL('./vendor/mediapipe/wasm', document.baseURI).href;
 const MODEL_PATH = new URL('./assets/hand_landmarker.task', document.baseURI).href;
@@ -187,6 +188,11 @@ function toggleLab() {
   saveSettings(settings);
 }
 
+function toggleSkeleton() {
+  settings.skeleton = !settings.skeleton;
+  saveSettings(settings);
+}
+
 function toggleMirror() {
   settings.mirror = !settings.mirror;
   saveSettings(settings);
@@ -293,6 +299,7 @@ function getMenuView() {
     zoneEditing: zone.editing,
     hands: settings.hands,
     mirror: settings.mirror,
+    skeleton: settings.skeleton,
     lab: settings.lab,
   };
 }
@@ -309,6 +316,7 @@ const menu = createMenu(
     hands1: () => setHands(1),
     hands2: () => setHands(2),
     toggleMirror,
+    toggleSkeleton,
     toggleLab,
     resetSettings,
   },
@@ -342,6 +350,7 @@ window.addEventListener('keydown', (e) => {
   }
 
   if (key === 'l') toggleLab();
+  else if (key === 's') toggleSkeleton();
   else if (key === 'c') clearAll('key C');
   else if (key === 'p') togglePause();
   else if (key === 'h') toggleHidden();
@@ -605,11 +614,11 @@ function detect() {
 }
 
 // ---------- Drawing ----------
-const HAND_COLORS = ['#ffd166', '#4cc9f0'];
+const HAND_COLORS = [theme.accent, theme.text];
 
 function drawHands() {
   for (const hand of state.hands) {
-    const color = HAND_COLORS[hand.id] ?? '#ffffff';
+    const color = HAND_COLORS[hand.id] ?? theme.text;
     const pts = hand.points.map((p) => ({ x: p.x * canvas.width, y: p.y * canvas.height }));
 
     // Hands outside the spawn zone (and not holding anything) are drawn faded
@@ -640,10 +649,10 @@ function drawHands() {
       ctx.beginPath();
       ctx.arc(x, y, pinching ? 16 : 10, 0, Math.PI * 2);
       if (pinching) {
-        ctx.fillStyle = '#ffffff';
+        ctx.fillStyle = theme.text;
         ctx.fill();
       } else {
-        ctx.strokeStyle = '#ffffff';
+        ctx.strokeStyle = theme.text;
         ctx.lineWidth = 2;
         ctx.stroke();
       }
@@ -655,9 +664,9 @@ function drawHands() {
       const my = (pts[4].y + pts[12].y) / 2;
       ctx.beginPath();
       ctx.arc(mx, my, 16, 0, Math.PI * 2);
-      ctx.fillStyle = '#ffffff';
+      ctx.fillStyle = theme.text;
       ctx.fill();
-      ctx.fillStyle = '#111111';
+      ctx.fillStyle = theme.bg;
       ctx.font = '700 16px system-ui, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
@@ -674,17 +683,17 @@ function drawProgressRing(x, y, progress, label) {
   ctx.save();
   ctx.lineWidth = 6;
   ctx.lineCap = 'round';
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+  ctx.strokeStyle = theme.track;
   ctx.beginPath();
   ctx.arc(x, y, r, 0, Math.PI * 2);
   ctx.stroke();
 
-  ctx.strokeStyle = '#ffffff';
+  ctx.strokeStyle = theme.accent;
   ctx.beginPath();
   ctx.arc(x, y, r, -Math.PI / 2, -Math.PI / 2 + progress * Math.PI * 2);
   ctx.stroke();
 
-  ctx.fillStyle = '#ffffff';
+  ctx.fillStyle = theme.text;
   ctx.font = '600 14px system-ui, sans-serif';
   ctx.textAlign = 'center';
   ctx.fillText(label, x, y + r + 22);
@@ -704,7 +713,7 @@ function drawDeleteProgress() {
   const r = scene.rect(item, canvas);
 
   ctx.save();
-  ctx.strokeStyle = '#ffffff';
+  ctx.strokeStyle = theme.accent;
   ctx.lineWidth = 3;
   ctx.setLineDash([8, 6]);
   ctx.strokeRect(r.x, r.y, r.w, r.h);
@@ -745,7 +754,7 @@ function updateLab() {
     `${state.trackerStatus}\n` +
     `${handLines}\n` +
     `Stamp ${state.selected + 1}/${state.stamps.length} · placed ${scene.count}${size}\n` +
-    `[L] lab [C] clear [P] pause [Z] zone [H] hide [M] menu\n` +
+    `[L] debug [S] hands [C] clear [P] pause [Z] zone [H] hide [M] menu\n` +
     `--- events ---\n` +
     (state.events.length ? state.events.join('\n') : '(none yet)');
 }
@@ -768,7 +777,7 @@ function frame(now) {
 
   // 3. Placed images, then the skeleton on top (skeleton only while the lab is on)
   if (state.step === 'live' && !state.imagesHidden) scene.draw(ctx, canvas);
-  if (settings.lab) drawHands();
+  if (settings.skeleton) drawHands();
   drawClearProgress();
   drawDeleteProgress();
   zone.draw(ctx); // only draws while the zone is being edited

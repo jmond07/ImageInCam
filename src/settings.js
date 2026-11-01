@@ -1,6 +1,6 @@
 const KEY = 'imageincam.settings';
 
-export const DEFAULT_SETTINGS = { hands: 2, mirror: true, lab: true };
+export const DEFAULT_SETTINGS = { hands: 2, mirror: true, skeleton: false, lab: false };
 
 export function loadSettings() {
   try {
@@ -8,7 +8,8 @@ export function loadSettings() {
     return {
       hands: s?.hands === 1 ? 1 : 2,
       mirror: s?.mirror !== false,
-      lab: s?.lab !== false,
+      skeleton: s?.skeleton === true,
+      lab: s?.lab === true,
     };
   } catch {
     return { ...DEFAULT_SETTINGS };

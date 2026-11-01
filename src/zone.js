@@ -1,3 +1,5 @@
+import { theme } from './theme.js';
+
 const STORAGE_KEY = 'imageincam.zone';
 const DEFAULT_RECT = { x: 0.05, y: 0.05, w: 0.9, h: 0.7 }; // fractions of the canvas
 const MIN_SIZE = 0.2; // smallest allowed width/height (fraction of the canvas)
@@ -194,12 +196,12 @@ export function createZone(canvas) {
       ctx.stroke();
 
       // Outline
-      ctx.strokeStyle = '#ffffff';
+      ctx.strokeStyle = theme.accent;
       ctx.lineWidth = 3;
       ctx.strokeRect(x0, y0, w, h);
 
       // Handles: corners and edge midpoints
-      ctx.fillStyle = '#ffffff';
+      ctx.fillStyle = theme.accent;
       const size = 14;
       const xs = [x0, x0 + w / 2, x0 + w];
       const ys = [y0, y0 + h / 2, y0 + h];
@@ -211,6 +213,7 @@ export function createZone(canvas) {
       }
 
       // Hint
+      ctx.fillStyle = theme.text;
       ctx.font = '600 15px system-ui, sans-serif';
       ctx.textAlign = 'center';
       ctx.fillText(
