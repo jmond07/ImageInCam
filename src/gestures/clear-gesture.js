@@ -18,7 +18,13 @@ export function createClearGesture() {
         !holdingAny &&
         hands.length === 2 &&
         hands.every(
-          (h) => h.shape.open && h.pinch && !h.pinch.pinching && h.motion.speed < STILL_SPEED
+          (h) =>
+            h.active &&
+            !h.shape.partial &&
+            h.shape.open &&
+            h.pinch &&
+            !h.pinch.pinching &&
+            h.motion.speed < STILL_SPEED
         );
 
       if (ready) {

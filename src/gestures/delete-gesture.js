@@ -15,7 +15,7 @@ export function createDeleteGesture() {
       let found = null;
       if (!holdingAny) {
         for (const h of hands) {
-          if (!h.shape.pointing || h.pinch?.pinching) continue;
+          if (!h.shape.pointing || !h.active || h.shape.partial) continue;
           const item = scene.hitTest(h.shape.indexTip.x, h.shape.indexTip.y, canvas);
           if (item && !item.held) {
             found = item;

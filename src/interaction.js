@@ -13,7 +13,7 @@ export function createInteraction(scene, log = () => {}) {
   let resize = null; // { handId, item, startWidth, startY, smoothY }
 
   const stateFor = (id) =>
-    (states[id] ??= { wasPinching: false, held: null, missingSince: null });
+    (states[id] ??= { wasPinching: false, armed: false, held: null, missingSince: null });
   const tag = (id) => `H${id + 1}`;
 
   function release(id, s, now) {
@@ -109,7 +109,16 @@ export function createInteraction(scene, log = () => {}) {
         const id = hand.id;
         present.add(id);
         const s = stateFor(id);
-        const { x, y, pinching } = hand.pinch;
+        const { x, y } = hand.pinch;
+
+        // A NEW pinch only counts if this hand showed an open hand inside the active
+        // zone first, and isn't pointing or cut off by the frame edge. A pinch that is
+        // already going is never cut, so you can still drag images out of the zone.
+        const raw = hand.pinch.pinching;
+        const eligible = hand.active && !hand.shape.pointing && !hand.shape.partial;
+        const pinching = raw && (s.wasPinching || s.armed);
+        if (!eligible) s.armed = false;
+        else if (!raw) s.armed = true;
 
         if (s.missingSince !== null) {
           log(`${tag(id)} BACK after ${Math.round(now - s.missingSince)}ms`);

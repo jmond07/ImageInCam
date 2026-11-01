@@ -9,6 +9,10 @@ export const OPEN_RATIO = 1.5; // average of the four fingers
 export const POINT_EXTENDED = 1.6; // pointing: the index must reach at least this far
 export const POINT_CURLED = 1.25; // pointing: the other three must stay below this
 
+// A hand with this many landmarks touching the frame edge is cut off by it
+const EDGE = 0.02; // fraction of the frame
+const EDGE_POINTS = 3;
+
 export function measureHand(points, width, height) {
   const px = (i) => ({ x: points[i].x * width, y: points[i].y * height });
   const wrist = px(WRIST);
@@ -22,6 +26,10 @@ export function measureHand(points, width, height) {
   const [indexReach, middleReach, ringReach, pinkyReach] = reach;
   const openness = reach.reduce((a, b) => a + b, 0) / reach.length;
 
+  const atEdge = points.filter(
+    (p) => p.x < EDGE || p.x > 1 - EDGE || p.y < EDGE || p.y > 1 - EDGE
+  ).length;
+
   return {
     palmX: (wrist.x + mcp.x) / 2,
     palmY: (wrist.y + mcp.y) / 2,
@@ -34,6 +42,7 @@ export function measureHand(points, width, height) {
       middleReach < POINT_CURLED &&
       ringReach < POINT_CURLED &&
       pinkyReach < POINT_CURLED,
+    partial: atEdge >= EDGE_POINTS,
     indexTip: px(INDEX_TIP),
   };
 }

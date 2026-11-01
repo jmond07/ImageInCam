@@ -8,6 +8,7 @@ import { createDeleteGesture } from './gestures/delete-gesture.js';
 import { loadStamps, MAX_STAMPS } from './stamps.js';
 import { createScene } from './scene.js';
 import { createInteraction } from './interaction.js';
+import { createZone } from './zone.js';
 
 const WASM_PATH = new URL('./vendor/mediapipe/wasm', document.baseURI).href;
 const MODEL_PATH = new URL('./assets/hand_landmarker.task', document.baseURI).href;
@@ -48,7 +49,7 @@ const state = {
   tracker: null,
   trackerStatus: 'Not loaded',
   delegate: '-',
-  hands: [], // [{ id, points, label, score, shape, motion, pinch }]
+  hands: [], // [{ id, points, label, score, shape, motion, pinch, active }]
   detectMs: 0,
   fps: 0,
   labVisible: true,
@@ -72,6 +73,7 @@ const scene = createScene();
 const interaction = createInteraction(scene, logEvent);
 const clearGesture = createClearGesture();
 const deleteGesture = createDeleteGesture();
+const zone = createZone(canvas);
 
 // Hands are tracked by stable id (0 or 1), not by MediaPipe's label
 const handIds = createHandIds();
@@ -97,12 +99,16 @@ function goTo(step) {
 }
 
 // ---------- Pause ----------
-function resetTracking() {
-  state.hands = [];
+function resetGestureProgress() {
   state.clearProgress = 0;
   state.clearAnchor = null;
   state.deleting = { item: null, progress: 0 };
   deleteGesture.reset();
+}
+
+function resetTracking() {
+  state.hands = [];
+  resetGestureProgress();
   handIds.reset();
   pinchTrackers.forEach((t) => t.reset());
   motionTrackers.forEach((t) => t.reset());
@@ -120,6 +126,17 @@ function togglePause() {
   }
 }
 
+// ---------- Active zone editor ----------
+function toggleZoneEditor() {
+  const on = !zone.editing;
+  zone.setEditing(on);
+  if (on) {
+    interaction.releaseAll(); // gestures are off while editing
+    resetGestureProgress();
+  }
+  logEvent(on ? 'ZONE editing' : 'ZONE saved');
+}
+
 // ---------- Keyboard ----------
 window.addEventListener('keydown', (e) => {
   if (state.step === 'welcome') return goTo('camera');
@@ -133,6 +150,8 @@ window.addEventListener('keydown', (e) => {
     scene.clear();
   } else if (key === 'p') {
     togglePause();
+  } else if (key === 'z') {
+    toggleZoneEditor();
   } else if (/^[1-9]$/.test(key)) {
     selectStamp(Number(key) - 1);
   }
@@ -277,6 +296,7 @@ function detect() {
       label: fixHandLabel(category?.categoryName),
       score: category?.score ?? 0,
       shape,
+      active: zone.contains(shape.palmX, shape.palmY), // inside the active zone?
       motion: motionTrackers[id].update(shape, t0),
       pinch: pinchTrackers[id].update(points, canvas.width, canvas.height, t0),
     });
@@ -290,8 +310,8 @@ function detect() {
     }
   });
 
-  // Gestures only act once we're in the live view
-  if (state.step === 'live') {
+  // Gestures only act in the live view, and not while the zone is being edited
+  if (state.step === 'live' && !zone.editing) {
     interaction.update(state.hands, canvas, state.stamps[state.selected], t0, (id) =>
       handIds.isActive(id)
     );
@@ -321,6 +341,11 @@ function drawHands() {
   for (const hand of state.hands) {
     const color = HAND_COLORS[hand.id] ?? '#ffffff';
     const pts = hand.points.map((p) => ({ x: p.x * canvas.width, y: p.y * canvas.height }));
+
+    // Hands outside the active zone (and not holding anything) are drawn faded
+    const faded = !hand.active && !interaction.isHolding(hand.id);
+    ctx.save();
+    ctx.globalAlpha = faded ? 0.35 : 1;
 
     ctx.strokeStyle = color;
     ctx.lineWidth = 3;
@@ -358,7 +383,6 @@ function drawHands() {
     if (hand.pinch?.clutch) {
       const mx = (pts[4].x + pts[12].x) / 2;
       const my = (pts[4].y + pts[12].y) / 2;
-      ctx.save();
       ctx.beginPath();
       ctx.arc(mx, my, 16, 0, Math.PI * 2);
       ctx.fillStyle = '#ffffff';
@@ -368,8 +392,9 @@ function drawHands() {
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText('↕', mx, my + 1);
-      ctx.restore();
     }
+
+    ctx.restore();
   }
 }
 
@@ -434,7 +459,8 @@ function updateLab() {
                 ? 'POINT '
                 : '-     ';
           const reach = h.shape.reach.map((r) => r.toFixed(1)).join('/');
-          return `H${h.id + 1} ${h.label.padEnd(5)} r ${h.pinch.ratio.toFixed(2)} ${mode} reach ${reach} v${h.motion.speed.toFixed(1)}`;
+          const flags = [!h.active && 'OUT', h.shape.partial && 'EDGE'].filter(Boolean).join(' ');
+          return `H${h.id + 1} ${h.label.padEnd(5)} r ${h.pinch.ratio.toFixed(2)} ${mode} reach ${reach} v${h.motion.speed.toFixed(1)} ${flags}`;
         })
         .join('\n')
     : state.paused
@@ -449,7 +475,7 @@ function updateLab() {
     `${state.trackerStatus}\n` +
     `${handLines}\n` +
     `Stamp ${state.selected + 1}/${state.stamps.length} · placed ${scene.count}${size}\n` +
-    `[L] hide  [C] clear  [P] pause\n` +
+    `[L] hide  [C] clear  [P] pause  [Z] zone\n` +
     `--- events ---\n` +
     (state.events.length ? state.events.join('\n') : '(none yet)');
 }
@@ -477,6 +503,7 @@ function frame(now) {
   if (state.labVisible) drawHands();
   drawClearProgress();
   drawDeleteProgress();
+  zone.draw(ctx); // only draws while the zone is being edited
 
   frameCount++;
   if (now - lastFpsTime >= 500) {
