@@ -3,10 +3,14 @@ const THUMB_TIP = 4;
 const INDEX_TIP = 8;
 const MIDDLE_MCP = 9;
 
-// Pinch turns ON below this ratio and OFF above the other one (hysteresis).
 // Ratio = thumb-index distance / palm length, so it doesn't depend on camera distance.
 export const PINCH_ON = 0.3;
 export const PINCH_OFF = 0.5;
+// Above this the fingers are clearly open: release right away
+export const PINCH_OFF_HARD = 0.9;
+// Between OFF and OFF_HARD the fingers must stay open this long to release.
+// Absorbs the landmark wobble that happens when the hand moves fast.
+export const RELEASE_DELAY_MS = 150;
 
 // 0..1. Higher = the point follows the fingers faster but jitters more
 const SMOOTHING = 0.5;
@@ -15,17 +19,33 @@ const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 
 export function createPinchTracker() {
   let pinching = false;
+  let openSince = null;
   let smooth = null;
 
   return {
-    // points: 21 normalized landmarks. width/height: canvas size in px.
-    update(points, width, height) {
+    // points: 21 normalized landmarks. width/height: canvas px. now: ms timestamp.
+    update(points, width, height, now) {
       const px = points.map((p) => ({ x: p.x * width, y: p.y * height }));
       const palm = dist(px[WRIST], px[MIDDLE_MCP]) || 1;
       const ratio = dist(px[THUMB_TIP], px[INDEX_TIP]) / palm;
 
-      if (!pinching && ratio < PINCH_ON) pinching = true;
-      else if (pinching && ratio > PINCH_OFF) pinching = false;
+      if (!pinching) {
+        if (ratio < PINCH_ON) {
+          pinching = true;
+          openSince = null;
+        }
+      } else if (ratio > PINCH_OFF_HARD) {
+        pinching = false;
+        openSince = null;
+      } else if (ratio > PINCH_OFF) {
+        openSince ??= now;
+        if (now - openSince >= RELEASE_DELAY_MS) {
+          pinching = false;
+          openSince = null;
+        }
+      } else {
+        openSince = null;
+      }
 
       // Pinch point = midpoint between thumb and index tips, smoothed
       const raw = {
@@ -42,9 +62,10 @@ export function createPinchTracker() {
       return { pinching, ratio, x: smooth.x, y: smooth.y };
     },
 
-    // Call when the hand leaves the frame
+    // Call when the hand is gone for good
     reset() {
       pinching = false;
+      openSince = null;
       smooth = null;
     },
   };

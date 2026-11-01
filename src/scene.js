@@ -20,6 +20,10 @@ export function createScene() {
       return items.length;
     },
 
+    has(item) {
+      return items.includes(item);
+    },
+
     add(stamp, px, py, canvas) {
       const item = {
         stamp,

@@ -1,5 +1,6 @@
 import { FilesetResolver, HandLandmarker } from './vendor/mediapipe/vision_bundle.mjs';
 import { createPinchTracker } from './gestures/pinch.js';
+import { createHandIds } from './gestures/hand-ids.js';
 import { loadStamps, MAX_STAMPS } from './stamps.js';
 import { createScene } from './scene.js';
 import { createInteraction } from './interaction.js';
@@ -34,7 +35,7 @@ const state = {
   tracker: null,
   trackerStatus: 'Not loaded',
   delegate: '-',
-  hands: [], // [{ points, label, score, pinch }]
+  hands: [], // [{ id, points, label, score, pinch }]
   detectMs: 0,
   fps: 0,
   labVisible: true,
@@ -43,14 +44,13 @@ const state = {
 const scene = createScene();
 const interaction = createInteraction(scene);
 
-// One pinch tracker per hand (keyed by label)
-const pinchTrackers = {
-  Left: createPinchTracker(),
-  Right: createPinchTracker(),
-};
+// Hands are tracked by stable id (0 or 1), not by MediaPipe's label
+const handIds = createHandIds();
+const pinchTrackers = [createPinchTracker(), createPinchTracker()];
 
 // MediaPipe's handedness comes out inverted in our setup (tested: raising the
-// left hand reports "Right"), so we swap it here, in one place.
+// left hand reports "Right"). Only used for display now, since it also flips
+// when the hand is tilted or moving fast.
 function fixHandLabel(name) {
   if (name === 'Left') return 'Right';
   if (name === 'Right') return 'Left';
@@ -171,6 +171,11 @@ async function loadTracker() {
           baseOptions: { modelAssetPath: MODEL_PATH, delegate },
           runningMode: 'VIDEO',
           numHands: 2,
+          // Slightly more tolerant than the 0.5 defaults, so fast hands are
+          // followed instead of being dropped and re-detected
+          minHandDetectionConfidence: 0.5,
+          minHandPresenceConfidence: 0.4,
+          minTrackingConfidence: 0.4,
         });
         state.delegate = delegate;
         state.trackerStatus = 'Tracking ready';
@@ -192,36 +197,46 @@ function detect() {
   const result = state.tracker.detectForVideo(canvas, t0);
   state.detectMs = performance.now() - t0;
 
-  const seen = new Set();
-  state.hands = result.landmarks.map((points, i) => {
+  // Stable ids from wrist positions (landmark 0)
+  const wrists = result.landmarks.map((pts) => ({
+    x: pts[0].x * canvas.width,
+    y: pts[0].y * canvas.height,
+  }));
+  const ids = handIds.assign(wrists, canvas.width, t0);
+
+  state.hands = [];
+  result.landmarks.forEach((points, i) => {
+    const id = ids[i];
+    if (id === null) return;
     const category = result.handedness[i]?.[0];
-    const label = fixHandLabel(category?.categoryName);
-    seen.add(label);
-    return {
+    state.hands.push({
+      id,
       points,
-      label,
+      label: fixHandLabel(category?.categoryName),
       score: category?.score ?? 0,
-      pinch: pinchTrackers[label]?.update(points, canvas.width, canvas.height),
-    };
+      pinch: pinchTrackers[id].update(points, canvas.width, canvas.height, t0),
+    });
   });
 
-  // Hands that left the frame lose their pinch state
-  for (const [label, tracker] of Object.entries(pinchTrackers)) {
-    if (!seen.has(label)) tracker.reset();
-  }
+  // Ids that expired lose their pinch state
+  pinchTrackers.forEach((tracker, id) => {
+    if (!handIds.isActive(id)) tracker.reset();
+  });
 
   // Gestures only act once we're in the live view
   if (state.step === 'live') {
-    interaction.update(state.hands, canvas, state.stamps[state.selected]);
+    interaction.update(state.hands, canvas, state.stamps[state.selected], t0, (id) =>
+      handIds.isActive(id)
+    );
   }
 }
 
 // ---------- Drawing ----------
-const HAND_COLORS = { Left: '#ffd166', Right: '#4cc9f0' };
+const HAND_COLORS = ['#ffd166', '#4cc9f0'];
 
 function drawHands() {
   for (const hand of state.hands) {
-    const color = HAND_COLORS[hand.label] ?? '#ffffff';
+    const color = HAND_COLORS[hand.id] ?? '#ffffff';
     const pts = hand.points.map((p) => ({ x: p.x * canvas.width, y: p.y * canvas.height }));
 
     ctx.strokeStyle = color;
@@ -266,8 +281,8 @@ function updateLab() {
     ? state.hands
         .map((h) =>
           h.pinch
-            ? `${h.label.padEnd(5)} ratio ${h.pinch.ratio.toFixed(2)} ${h.pinch.pinching ? 'PINCH' : '-'}`
-            : `${h.label} ?`
+            ? `H${h.id + 1} ${h.label.padEnd(5)} ratio ${h.pinch.ratio.toFixed(2)} ${h.pinch.pinching ? 'PINCH' : '-'}`
+            : `H${h.id + 1} ${h.label} ?`
         )
         .join('\n')
     : 'no hands';
