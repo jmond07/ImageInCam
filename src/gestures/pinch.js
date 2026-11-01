@@ -24,24 +24,30 @@ export function createPinchTracker() {
 
   return {
     // points: 21 normalized landmarks. width/height: canvas px. now: ms timestamp.
+    // Returns { pinching, ratio, x, y, event } where event is what happened
+    // THIS frame: 'start' | 'hard' | 'delay' | null
     update(points, width, height, now) {
       const px = points.map((p) => ({ x: p.x * width, y: p.y * height }));
       const palm = dist(px[WRIST], px[MIDDLE_MCP]) || 1;
       const ratio = dist(px[THUMB_TIP], px[INDEX_TIP]) / palm;
 
+      let event = null;
       if (!pinching) {
         if (ratio < PINCH_ON) {
           pinching = true;
           openSince = null;
+          event = 'start';
         }
       } else if (ratio > PINCH_OFF_HARD) {
         pinching = false;
         openSince = null;
+        event = 'hard';
       } else if (ratio > PINCH_OFF) {
         openSince ??= now;
         if (now - openSince >= RELEASE_DELAY_MS) {
           pinching = false;
           openSince = null;
+          event = 'delay';
         }
       } else {
         openSince = null;
@@ -59,7 +65,7 @@ export function createPinchTracker() {
           }
         : raw;
 
-      return { pinching, ratio, x: smooth.x, y: smooth.y };
+      return { pinching, ratio, x: smooth.x, y: smooth.y, event };
     },
 
     // Call when the hand is gone for good

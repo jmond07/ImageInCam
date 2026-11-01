@@ -26,6 +26,14 @@ const pickBtn = document.getElementById('pick-files');
 const fileCount = document.getElementById('file-count');
 const startBtn = document.getElementById('start');
 
+// Detection runs on its own small mirrored copy of the camera frame
+const DETECT_W = 640;
+const DETECT_H = 360;
+const detectCanvas = document.createElement('canvas');
+detectCanvas.width = DETECT_W;
+detectCanvas.height = DETECT_H;
+const detectCtx = detectCanvas.getContext('2d');
+
 const state = {
   step: 'welcome',
   stream: null,
@@ -39,10 +47,20 @@ const state = {
   detectMs: 0,
   fps: 0,
   labVisible: true,
+  events: [], // last gesture events, shown in the lab and logged to the console
 };
 
+// Gesture event log: lab overlay + DevTools console (so you can copy it)
+const appStart = performance.now();
+function logEvent(message) {
+  const line = `${((performance.now() - appStart) / 1000).toFixed(1)}s ${message}`;
+  state.events.push(line);
+  if (state.events.length > 6) state.events.shift();
+  console.log(line);
+}
+
 const scene = createScene();
-const interaction = createInteraction(scene);
+const interaction = createInteraction(scene, logEvent);
 
 // Hands are tracked by stable id (0 or 1), not by MediaPipe's label
 const handIds = createHandIds();
@@ -193,8 +211,15 @@ async function loadTracker() {
 
 function detect() {
   const t0 = performance.now();
-  // We detect on the mirrored canvas, so landmarks already match what's on screen
-  const result = state.tracker.detectForVideo(canvas, t0);
+
+  // Small mirrored copy of the camera frame: much cheaper than 1280x720, and
+  // landmarks are normalized so they still map onto the big canvas
+  detectCtx.save();
+  detectCtx.scale(-1, 1);
+  detectCtx.drawImage(video, -DETECT_W, 0, DETECT_W, DETECT_H);
+  detectCtx.restore();
+
+  const result = state.tracker.detectForVideo(detectCanvas, t0);
   state.detectMs = performance.now() - t0;
 
   // Stable ids from wrist positions (landmark 0)
@@ -202,7 +227,7 @@ function detect() {
     x: pts[0].x * canvas.width,
     y: pts[0].y * canvas.height,
   }));
-  const ids = handIds.assign(wrists, canvas.width, t0);
+  const ids = handIds.assign(wrists, canvas.width, t0, (id) => interaction.isHolding(id));
 
   state.hands = [];
   result.landmarks.forEach((points, i) => {
@@ -292,7 +317,9 @@ function updateLab() {
     `${state.trackerStatus}\n` +
     `${handLines}\n` +
     `Stamp ${state.selected + 1}/${state.stamps.length} · placed ${scene.count}\n` +
-    `[L] hide  [C] clear`;
+    `[L] hide  [C] clear\n` +
+    `--- events ---\n` +
+    (state.events.length ? state.events.join('\n') : '(none yet)');
 }
 
 // ---------- Main loop ----------
@@ -307,7 +334,7 @@ function frame(now) {
   ctx.drawImage(video, -canvas.width, 0, canvas.width, canvas.height);
   ctx.restore();
 
-  // 2. Detect BEFORE drawing the placed images, so the tracker only sees the camera
+  // 2. Detect when the camera delivered a new frame (it uses its own small canvas)
   if (state.tracker && video.currentTime !== lastVideoTime) {
     lastVideoTime = video.currentTime;
     detect();
