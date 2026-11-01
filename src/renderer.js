@@ -341,6 +341,23 @@ function drawHands() {
         ctx.stroke();
       }
     }
+
+    // Resize clutch marker (thumb + middle finger touching)
+    if (hand.pinch?.clutch) {
+      const mx = (pts[4].x + pts[12].x) / 2;
+      const my = (pts[4].y + pts[12].y) / 2;
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(mx, my, 16, 0, Math.PI * 2);
+      ctx.fillStyle = '#ffffff';
+      ctx.fill();
+      ctx.fillStyle = '#111111';
+      ctx.font = '700 16px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('↕', mx, my + 1);
+      ctx.restore();
+    }
   }
 }
 
@@ -374,21 +391,24 @@ function updateLab() {
 
   const handLines = state.hands.length
     ? state.hands
-        .map((h) =>
-          h.pinch
-            ? `H${h.id + 1} ${h.label.padEnd(5)} r ${h.pinch.ratio.toFixed(2)} ${h.pinch.pinching ? 'PINCH' : '-    '} open ${h.shape.openness.toFixed(1)} v${h.motion.speed.toFixed(1)}`
-            : `H${h.id + 1} ${h.label} ?`
-        )
+        .map((h) => {
+          if (!h.pinch) return `H${h.id + 1} ${h.label} ?`;
+          const mode = h.pinch.pinching ? 'PINCH ' : h.pinch.clutch ? 'CLUTCH' : '-     ';
+          return `H${h.id + 1} ${h.label.padEnd(5)} r ${h.pinch.ratio.toFixed(2)} ${mode} open ${h.shape.openness.toFixed(1)} v${h.motion.speed.toFixed(1)}`;
+        })
         .join('\n')
     : state.paused
       ? 'paused'
       : 'no hands';
 
+  const size =
+    interaction.resizeWidth !== null ? ` · resizing ${(interaction.resizeWidth * 100).toFixed(0)}%` : '';
+
   lab.textContent =
     `FPS ${state.fps} · detect ${state.detectMs.toFixed(1)} ms · ${state.delegate}\n` +
     `${state.trackerStatus}\n` +
     `${handLines}\n` +
-    `Stamp ${state.selected + 1}/${state.stamps.length} · placed ${scene.count}\n` +
+    `Stamp ${state.selected + 1}/${state.stamps.length} · placed ${scene.count}${size}\n` +
     `[L] hide  [C] clear  [P] pause\n` +
     `--- events ---\n` +
     (state.events.length ? state.events.join('\n') : '(none yet)');

@@ -53,9 +53,9 @@ export function createScene() {
       item.y = Math.min(1, Math.max(0, py / canvas.height));
     },
 
-    // factor > 1 grows the image, < 1 shrinks it (around its center)
-    scaleBy(item, factor) {
-      item.width = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, item.width * factor));
+    // Sets the image width as a fraction of the canvas width (clamped)
+    setWidth(item, width) {
+      item.width = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, width));
     },
 
     bringToFront(item) {

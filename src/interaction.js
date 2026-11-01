@@ -2,9 +2,15 @@ const REGRAB_FAST_MS = 250; // same hand pinching again this soon re-grabs, at a
 const REGRAB_MS = 400; // up to here it re-grabs only if close enough
 const REGRAB_DISTANCE = 0.2; // fraction of canvas width
 
+// Resize: free hand with thumb + middle finger touching, moving up/down
+const RESIZE_GAIN = 0.6; // size change per palm of travel (exponential: 1 palm up = x1.8)
+const RESIZE_DEADZONE = 0.15; // palms around the starting height where nothing happens
+const RESIZE_SMOOTHING = 0.35; // 0..1, lower = steadier but slower to react
+
 export function createInteraction(scene, log = () => {}) {
   const states = {}; // hand id -> { wasPinching, held, missingSince }
   let lastReleased = null; // { item, time, id, dx, dy } (shared between hands)
+  let resize = null; // { handId, item, startWidth, startY, smoothY }
 
   const stateFor = (id) =>
     (states[id] ??= { wasPinching: false, held: null, missingSince: null });
@@ -48,6 +54,38 @@ export function createInteraction(scene, log = () => {}) {
     };
   }
 
+  // One hand holds an image, the other one (thumb + middle touching) scales it
+  function updateResize(hands) {
+    const holders = hands.filter((h) => states[h.id]?.held);
+    const holder = holders.length === 1 ? holders[0] : null;
+    const clutchHand = holder ? hands.find((h) => h.id !== holder.id && h.pinch?.clutch) : null;
+
+    if (!holder || !clutchHand) {
+      if (resize) {
+        log(`RESIZE end (${(resize.item.width * 100).toFixed(0)}%)`);
+        resize = null;
+      }
+      return;
+    }
+
+    const item = states[holder.id].held.item;
+    if (!resize || resize.item !== item || resize.handId !== clutchHand.id) {
+      resize = {
+        handId: clutchHand.id,
+        item,
+        startWidth: item.width,
+        startY: clutchHand.shape.palmY,
+        smoothY: clutchHand.shape.palmY,
+      };
+      log(`${tag(clutchHand.id)} RESIZE start`);
+    }
+
+    resize.smoothY += (clutchHand.shape.palmY - resize.smoothY) * RESIZE_SMOOTHING;
+    let dy = (resize.startY - resize.smoothY) / clutchHand.shape.palmSize; // up is positive
+    dy = Math.sign(dy) * Math.max(0, Math.abs(dy) - RESIZE_DEADZONE);
+    scene.setWidth(item, resize.startWidth * Math.exp(RESIZE_GAIN * dy));
+  }
+
   return {
     isHolding(id) {
       return !!states[id]?.held;
@@ -55,6 +93,11 @@ export function createInteraction(scene, log = () => {}) {
 
     holdingAny() {
       return Object.values(states).some((s) => s.held);
+    },
+
+    // Width (fraction of canvas) of the image being resized, or null
+    get resizeWidth() {
+      return resize ? resize.item.width : null;
     },
 
     // hands: state.hands. stamp: the selected stamp. now: ms. isActive(id): hand slot still alive.
@@ -130,17 +173,7 @@ export function createInteraction(scene, log = () => {}) {
         }
       }
 
-      // Conductor: a free hand moving up/down resizes the image the other hand holds
-      const holders = hands.filter((h) => states[h.id]?.held);
-      if (holders.length === 1) {
-        const item = states[holders[0].id].held.item;
-        const conductor = hands.find(
-          (h) => h.id !== holders[0].id && h.pinch && !h.pinch.pinching && h.motion
-        );
-        if (conductor && conductor.motion.factor !== 1) {
-          scene.scaleBy(item, conductor.motion.factor);
-        }
-      }
+      updateResize(hands);
     },
 
     releaseAll() {
@@ -149,6 +182,7 @@ export function createInteraction(scene, log = () => {}) {
         s.missingSince = null;
       }
       lastReleased = null;
+      resize = null;
     },
   };
 }
