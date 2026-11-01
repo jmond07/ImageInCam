@@ -4,6 +4,7 @@ import { createHandIds } from './gestures/hand-ids.js';
 import { measureHand } from './gestures/hand-shape.js';
 import { createMotionTracker } from './gestures/motion.js';
 import { createClearGesture } from './gestures/clear-gesture.js';
+import { createDeleteGesture } from './gestures/delete-gesture.js';
 import { loadStamps, MAX_STAMPS } from './stamps.js';
 import { createScene } from './scene.js';
 import { createInteraction } from './interaction.js';
@@ -54,6 +55,7 @@ const state = {
   paused: false,
   clearProgress: 0,
   clearAnchor: null,
+  deleting: { item: null, progress: 0 },
   events: [], // last gesture events, shown in the lab and logged to the console
 };
 
@@ -69,6 +71,7 @@ function logEvent(message) {
 const scene = createScene();
 const interaction = createInteraction(scene, logEvent);
 const clearGesture = createClearGesture();
+const deleteGesture = createDeleteGesture();
 
 // Hands are tracked by stable id (0 or 1), not by MediaPipe's label
 const handIds = createHandIds();
@@ -98,6 +101,8 @@ function resetTracking() {
   state.hands = [];
   state.clearProgress = 0;
   state.clearAnchor = null;
+  state.deleting = { item: null, progress: 0 };
+  deleteGesture.reset();
   handIds.reset();
   pinchTrackers.forEach((t) => t.reset());
   motionTrackers.forEach((t) => t.reset());
@@ -299,6 +304,13 @@ function detect() {
       scene.clear();
       logEvent('CLEAR (two open hands)');
     }
+
+    const del = deleteGesture.update(state.hands, scene, canvas, interaction.holdingAny(), t0);
+    state.deleting = del;
+    if (del.triggered) {
+      scene.remove(del.item);
+      logEvent('DELETE (pointed image)');
+    }
   }
 }
 
@@ -361,12 +373,10 @@ function drawHands() {
   }
 }
 
-// Progress ring for the "clear all" gesture (drawn even when the lab is hidden)
-function drawClearProgress() {
-  if (state.clearProgress <= 0 || !state.clearAnchor) return;
-  const { x, y } = state.clearAnchor;
+// Draws a circular progress ring with a label under it
+function drawProgressRing(x, y, progress, label) {
   const r = 36;
-
+  ctx.save();
   ctx.lineWidth = 6;
   ctx.lineCap = 'round';
   ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
@@ -376,13 +386,36 @@ function drawClearProgress() {
 
   ctx.strokeStyle = '#ffffff';
   ctx.beginPath();
-  ctx.arc(x, y, r, -Math.PI / 2, -Math.PI / 2 + state.clearProgress * Math.PI * 2);
+  ctx.arc(x, y, r, -Math.PI / 2, -Math.PI / 2 + progress * Math.PI * 2);
   ctx.stroke();
 
   ctx.fillStyle = '#ffffff';
   ctx.font = '600 14px system-ui, sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText('Clearing…', x, y + r + 22);
+  ctx.fillText(label, x, y + r + 22);
+  ctx.restore();
+}
+
+// Progress for the "clear all" gesture (drawn even when the lab is hidden)
+function drawClearProgress() {
+  if (state.clearProgress <= 0 || !state.clearAnchor) return;
+  drawProgressRing(state.clearAnchor.x, state.clearAnchor.y, state.clearProgress, 'Clearing…');
+}
+
+// Progress for the "delete one image" gesture: dashed outline + ring on the image
+function drawDeleteProgress() {
+  const { item, progress } = state.deleting;
+  if (!item || progress <= 0) return;
+  const r = scene.rect(item, canvas);
+
+  ctx.save();
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 3;
+  ctx.setLineDash([8, 6]);
+  ctx.strokeRect(r.x, r.y, r.w, r.h);
+  ctx.restore();
+
+  drawProgressRing(r.x + r.w / 2, r.y + r.h / 2, progress, 'Deleting…');
 }
 
 function updateLab() {
@@ -393,8 +426,15 @@ function updateLab() {
     ? state.hands
         .map((h) => {
           if (!h.pinch) return `H${h.id + 1} ${h.label} ?`;
-          const mode = h.pinch.pinching ? 'PINCH ' : h.pinch.clutch ? 'CLUTCH' : '-     ';
-          return `H${h.id + 1} ${h.label.padEnd(5)} r ${h.pinch.ratio.toFixed(2)} ${mode} open ${h.shape.openness.toFixed(1)} v${h.motion.speed.toFixed(1)}`;
+          const mode = h.pinch.pinching
+            ? 'PINCH '
+            : h.pinch.clutch
+              ? 'CLUTCH'
+              : h.shape.pointing
+                ? 'POINT '
+                : '-     ';
+          const reach = h.shape.reach.map((r) => r.toFixed(1)).join('/');
+          return `H${h.id + 1} ${h.label.padEnd(5)} r ${h.pinch.ratio.toFixed(2)} ${mode} reach ${reach} v${h.motion.speed.toFixed(1)}`;
         })
         .join('\n')
     : state.paused
@@ -436,6 +476,7 @@ function frame(now) {
   if (state.step === 'live') scene.draw(ctx, canvas);
   if (state.labVisible) drawHands();
   drawClearProgress();
+  drawDeleteProgress();
 
   frameCount++;
   if (now - lastFpsTime >= 500) {

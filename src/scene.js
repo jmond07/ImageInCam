@@ -26,6 +26,16 @@ export function createScene() {
       return items.includes(item);
     },
 
+    remove(item) {
+      const i = items.indexOf(item);
+      if (i !== -1) items.splice(i, 1);
+    },
+
+    // Rectangle of an image in canvas px: { x, y, w, h }
+    rect(item, canvas) {
+      return rectOf(item, canvas);
+    },
+
     add(stamp, px, py, canvas) {
       const item = {
         stamp,

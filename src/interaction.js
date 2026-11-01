@@ -58,7 +58,7 @@ export function createInteraction(scene, log = () => {}) {
   function updateResize(hands) {
     const holders = hands.filter((h) => states[h.id]?.held);
     const holder = holders.length === 1 ? holders[0] : null;
-    const clutchHand = holder ? hands.find((h) => h.id !== holder.id && h.pinch?.clutch) : null;
+    const clutchHand = holder ? hands.find((h) => h.id !== holder.id && h.pinch?.clutch && !h.shape.pointing) : null;
 
     if (!holder || !clutchHand) {
       if (resize) {
