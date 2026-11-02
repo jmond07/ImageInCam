@@ -12,6 +12,10 @@ const modules = path.join(root, 'node_modules');
   fs.mkdirSync(to, { recursive: true });
   fs.copyFileSync(path.join(from, 'vision_bundle.mjs'), path.join(to, 'vision_bundle.mjs'));
   fs.cpSync(path.join(from, 'wasm'), path.join(to, 'wasm'), { recursive: true });
+  const mpLicense = path.join(from, 'LICENSE');
+  if (fs.existsSync(mpLicense)) {
+    fs.copyFileSync(mpLicense, path.join(to, 'LICENSE-MediaPipe.txt'));
+  }
   console.log('MediaPipe assets copied to', to);
 }
 

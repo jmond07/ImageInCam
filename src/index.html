@@ -114,7 +114,12 @@
 
     <section>
       <h3>App</h3>
-      <button class="item" data-action="resetSettings"><span>Reset settings</span></button>
+      <button class="item" id="m-reset" data-action="askReset"><span>Reset settings</span></button>
+      <div class="confirm" id="m-reset-confirm" hidden>
+        <span>Reset all settings?</span>
+        <button class="yes" data-action="resetSettings">Reset</button>
+        <button data-action="cancelReset">Cancel</button>
+      </div>
       <details class="about">
         <summary>About</summary>
         <p class="note" id="m-version"></p>

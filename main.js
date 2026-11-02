@@ -10,6 +10,9 @@ protocol.registerSchemesAsPrivileged([
   { scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } },
 ]);
 
+// Keep rendering even when another window covers ImageInCam, so OBS never gets a frozen picture
+app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion');
+
 // The page tells us when closing the window needs a confirmation (only in the live view).
 // If it never says so, the window just closes, so a broken page can't trap the user.
 let confirmClose = false;
@@ -32,6 +35,7 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      backgroundThrottling: false,
     },
   });
 

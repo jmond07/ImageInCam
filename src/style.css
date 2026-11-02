@@ -394,3 +394,34 @@ body.presenting .menu-btn { display: none; }
 body.presenting .titlebar > * { visibility: hidden; }
 body.presenting,
 body.presenting * { cursor: none; }
+
+/* Inline confirmation for "Reset settings" */
+.menu .confirm {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  margin-bottom: 4px;
+  font-size: 0.85rem;
+  background: var(--surface-2);
+  border-radius: var(--radius);
+}
+.menu .confirm span { flex: 1; }
+.menu .confirm button {
+  font: inherit;
+  font-size: 0.8rem;
+  padding: 3px 10px;
+  color: var(--text);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+.menu .confirm button:hover { border-color: var(--accent); }
+.menu .confirm button.yes {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 600;
+}
+.menu [hidden] { display: none; }

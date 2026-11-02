@@ -78,6 +78,7 @@ export function createMenu(handlers, getView) {
     root.setAttribute('aria-hidden', String(!on));
     button.setAttribute('aria-expanded', String(on));
     if (on) sync();
+    else showResetConfirm(false);
     wake();
   }
 
@@ -86,10 +87,30 @@ export function createMenu(handlers, getView) {
     button.blur();
   });
 
+  // "Reset settings" asks for confirmation inline (and gives up by itself after 5 s)
+  let resetTimer = null;
+  function showResetConfirm(on) {
+    clearTimeout(resetTimer);
+    $('m-reset').hidden = on;
+    $('m-reset-confirm').hidden = !on;
+    if (on) resetTimer = setTimeout(() => showResetConfirm(false), 5000);
+  }
+
   root.addEventListener('click', (e) => {
     const el = e.target.closest('[data-action]');
     if (!el || el.disabled) return;
-    handlers[el.dataset.action]?.();
+    const action = el.dataset.action;
+
+    // The reset button asks first, right below itself
+    if (action === 'askReset') {
+      showResetConfirm(true);
+    } else if (action === 'cancelReset') {
+      showResetConfirm(false);
+    } else {
+      handlers[action]?.();
+      if (action === 'resetSettings') showResetConfirm(false);
+    }
+
     sync();
     el.blur();
   });
