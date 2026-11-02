@@ -7,4 +7,7 @@ contextBridge.exposeInMainWorld('api', {
   // Called when the user tries to close the window and a confirmation is needed
   onCloseRequested: (callback) => ipcRenderer.on('app:close-requested', () => callback()),
   quit: () => ipcRenderer.send('app:quit'),
+  // Resize the window so the picture area is exactly 16:9
+  fitWindow: () => ipcRenderer.send('app:fit-window'),
+  getVersion: () => ipcRenderer.invoke('app:version'),
 });

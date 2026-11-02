@@ -384,3 +384,13 @@ body.idle .menu-btn { opacity: 0; }
 .titlebar .glyph { width: 16px; height: 16px; }
 .glyph .body { fill: var(--accent); }
 .glyph .cut { fill: var(--bg); }
+
+/* ---------- Presentation mode: only the camera, your images and your hands ---------- */
+body.presenting #lab,
+body.presenting .hud,
+body.presenting .badge,
+body.presenting .menu,
+body.presenting .menu-btn { display: none; }
+body.presenting .titlebar > * { visibility: hidden; }
+body.presenting,
+body.presenting * { cursor: none; }

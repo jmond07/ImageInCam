@@ -104,10 +104,12 @@
 
     <section>
       <h3>View</h3>
+      <button class="item" data-action="togglePresentation"><span>Presentation mode</span><kbd>F</kbd></button>
+      <button class="item" data-action="fitWindow"><span>Fit window to 16:9</span></button>
       <label class="row"><span>Mirror camera</span><input id="m-mirror" type="checkbox" data-action="toggleMirror"></label>
       <label class="row"><span>Show hands</span><input id="m-skeleton" type="checkbox" data-action="toggleSkeleton"></label>
       <label class="row"><span>Debug panel</span><input id="m-lab" type="checkbox" data-action="toggleLab"></label>
-      <p class="note">Turn the mirror off when streaming, so viewers see you the right way round. "Show hands" draws your hand skeleton over the camera.</p>
+      <p class="note">Presentation mode hides all the interface (F or Esc to leave). Turn the mirror off when streaming, so viewers see you the right way round.</p>
     </section>
 
     <section>
@@ -115,6 +117,7 @@
       <button class="item" data-action="resetSettings"><span>Reset settings</span></button>
       <details class="about">
         <summary>About</summary>
+        <p class="note" id="m-version"></p>
         <p>ImageInCam puts your images on your webcam and lets you move them with hand gestures. Everything runs on your computer; nothing is recorded or uploaded.</p>
         <p>Built with Electron and MediaPipe. MIT License.</p>
         <p><a href="https://github.com/jmond07/ImageInCam" target="_blank" rel="noopener">github.com/jmond07/ImageInCam</a></p>

@@ -3,6 +3,7 @@ const path = require('path');
 const { pathToFileURL } = require('url');
 
 const SRC_DIR = path.join(__dirname, 'src');
+const TITLEBAR = 32; // height of title strip in px (same as --titlebar in style.css)
 
 // Must run before app is ready
 protocol.registerSchemesAsPrivileged([
@@ -17,14 +18,14 @@ let quitting = false;
 function createWindow() {
   const win = new BrowserWindow({
     width: 800,
-    height: 482, // 450 of picture + the 32px title strip
+    height: 450 + TITLEBAR, // 450 of picture + the title strip
     minWidth: 400,
-    minHeight: 257,
+    minHeight: 225 + TITLEBAR,
     backgroundColor: '#141414',
     // We draw our own title strip; Electron draws the window buttons on top of it.
     // Keep these colors in sync with --bg, --text and --titlebar in style.css.
     titleBarStyle: 'hidden',
-    titleBarOverlay: { color: '#141414', symbolColor: '#e8e8e8', height: 32 },
+    titleBarOverlay: { color: '#141414', symbolColor: '#e8e8e8', height: TITLEBAR },
     show: false,
     title: 'ImageInCam',
     webPreferences: {
@@ -67,6 +68,15 @@ ipcMain.on('app:quit', () => {
   quitting = true;
   app.quit();
 });
+// Resizes the window so the picture area is exactly 16:9 (cleaner to crop in OBS)
+ipcMain.on('app:fit-window', (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (!win || win.isMaximized() || win.isFullScreen()) return;
+  const [width] = win.getContentSize();
+  win.setContentSize(width, Math.round((width * 9) / 16) + TITLEBAR);
+});
+
+ipcMain.handle('app:version', () => app.getVersion());
 
 app.whenReady().then(() => {
   // Serves everything inside src/ under app://local/

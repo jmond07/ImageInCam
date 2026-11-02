@@ -73,6 +73,7 @@ const state = {
   paused: false,
   imagesHidden: false,
   quitOpen: false,
+  presenting: false,
   clearProgress: 0,
   clearAnchor: null,
   deleting: { item: null, progress: 0 },
@@ -172,6 +173,7 @@ function toggleHidden() {
 
 // ---------- Active zone editor ----------
 function toggleZoneEditor() {
+  if (state.presenting) return;
   const on = !zone.editing;
   zone.setEditing(on);
   if (on) {
@@ -180,6 +182,19 @@ function toggleZoneEditor() {
     resetGestureProgress();
   }
   logEvent(on ? 'ZONE editing' : 'ZONE saved');
+}
+
+// ---------- Presentation mode ----------
+// Hides all the interface so only the camera, your images and your hands (if
+// "Show hands" is on) remain. Gestures and shortcuts keep working.
+function togglePresentation() {
+  state.presenting = !state.presenting;
+  document.body.classList.toggle('presenting', state.presenting);
+  if (state.presenting) {
+    menu.close();
+    zone.setEditing(false);
+  }
+  logEvent(state.presenting ? 'PRESENTATION on' : 'PRESENTATION off');
 }
 
 // ---------- Settings ----------
@@ -313,6 +328,8 @@ const menu = createMenu(
     addImages: () => addInput.click(),
     togglePause,
     toggleZone: toggleZoneEditor,
+    togglePresentation,
+    fitWindow: () => window.api?.fitWindow(),
     hands1: () => setHands(1),
     hands2: () => setHands(2),
     toggleMirror,
@@ -322,6 +339,11 @@ const menu = createMenu(
   },
   getMenuView
 );
+
+// Show the app version in the About section
+window.api?.getVersion().then((version) => {
+  document.getElementById('m-version').textContent = `Version ${version}`;
+});
 
 // ---------- Keyboard and mouse ----------
 window.addEventListener('keydown', (e) => {
@@ -355,8 +377,13 @@ window.addEventListener('keydown', (e) => {
   else if (key === 'p') togglePause();
   else if (key === 'h') toggleHidden();
   else if (key === 'z') toggleZoneEditor();
-  else if (key === 'm') menu.toggle();
-  else if (key === 'escape') menu.close();
+  else if (key === 'f') togglePresentation();
+  else if (key === 'm') {
+    if (!state.presenting) menu.toggle();
+  } else if (key === 'escape') {
+    if (state.presenting) togglePresentation();
+    else menu.close();
+  }
   else if (/^[1-9]$/.test(key)) selectStamp(Number(key) - 1);
 });
 
@@ -754,7 +781,7 @@ function updateLab() {
     `${state.trackerStatus}\n` +
     `${handLines}\n` +
     `Stamp ${state.selected + 1}/${state.stamps.length} · placed ${scene.count}${size}\n` +
-    `[L] debug [S] hands [C] clear [P] pause [Z] zone [H] hide [M] menu\n` +
+    `[L] debug [S] hands [C] clear [P] pause [Z] zone [H] hide [F] present [M] menu\n` +
     `--- events ---\n` +
     (state.events.length ? state.events.join('\n') : '(none yet)');
 }
