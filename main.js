@@ -17,11 +17,14 @@ let quitting = false;
 function createWindow() {
   const win = new BrowserWindow({
     width: 800,
-    height: 450,
+    height: 482, // 450 of picture + the 32px title strip
     minWidth: 400,
-    minHeight: 225,
-    backgroundColor: '#0f0f14',
-    autoHideMenuBar: true,
+    minHeight: 257,
+    backgroundColor: '#141414',
+    // We draw our own title strip; Electron draws the window buttons on top of it.
+    // Keep these colors in sync with --bg, --text and --titlebar in style.css.
+    titleBarStyle: 'hidden',
+    titleBarOverlay: { color: '#141414', symbolColor: '#e8e8e8', height: 32 },
     show: false,
     title: 'ImageInCam',
     webPreferences: {
@@ -30,8 +33,6 @@ function createWindow() {
       nodeIntegration: false,
     },
   });
-
-  win.setAspectRatio(16 / 9);
 
   // Links open in the real browser, and the app window never navigates away
   win.webContents.setWindowOpenHandler(({ url }) => {

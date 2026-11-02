@@ -1,5 +1,3 @@
-import { theme } from './theme.js';
-
 const MAX_ITEMS = 40;
 const DEFAULT_WIDTH = 0.18; // image width as a fraction of canvas width
 const MIN_WIDTH = 0.04;
@@ -97,7 +95,7 @@ export function createScene() {
         const r = rectOf(item, canvas);
         ctx.drawImage(item.stamp.image, r.x, r.y, r.w, r.h);
         if (item.held) {
-          ctx.strokeStyle = theme.accent;
+          ctx.strokeStyle = '#ffffff';
           ctx.lineWidth = 2;
           ctx.strokeRect(r.x, r.y, r.w, r.h);
         }

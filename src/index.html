@@ -7,6 +7,18 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
+
+  <header class="titlebar">
+    <svg class="glyph" viewBox="0 0 256 256" aria-hidden="true">
+      <rect class="body" x="40" y="80" width="176" height="120" rx="20" />
+      <rect class="body" x="92" y="60" width="72" height="28" rx="8" />
+      <circle class="cut" cx="128" cy="140" r="40" />
+      <circle class="body" cx="128" cy="140" r="22" />
+      <circle class="cut" cx="188" cy="106" r="7" />
+    </svg>
+    <span>ImageInCam</span>
+  </header>
+
   <canvas id="stage" width="1280" height="720"></canvas>
   <video id="cam" playsinline muted hidden></video>
   <pre id="lab" hidden></pre>

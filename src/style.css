@@ -26,6 +26,7 @@
   --danger: #ff6b6b;
   --radius: 6px;
   --mono: 'IBM Plex Mono', ui-monospace, Consolas, monospace;
+  --titlebar: 32px;
 }
 
 * { box-sizing: border-box; }
@@ -46,16 +47,17 @@ html, body {
 
 #stage {
   position: fixed;
-  inset: 0;
+  top: var(--titlebar);
+  left: 0;
   width: 100%;
-  height: 100%;
+  height: calc(100% - var(--titlebar));
   object-fit: contain;
 }
 
 /* ---------- Screens ---------- */
 .screen {
   position: fixed;
-  inset: 0;
+  inset: var(--titlebar) 0 0 0;
   display: grid;
   place-content: center;
   justify-items: center;
@@ -156,7 +158,7 @@ p { margin: 0 0 1rem; font-size: 0.9rem; line-height: 1.4; }
 /* ---------- Debug panel ---------- */
 #lab {
   position: fixed;
-  top: 8px;
+  top: calc(var(--titlebar) + 8px);
   left: 8px;
   margin: 0;
   padding: 6px 8px;
@@ -209,7 +211,7 @@ p { margin: 0 0 1rem; font-size: 0.9rem; line-height: 1.4; }
 /* ---------- Badge (paused / hidden) ---------- */
 .badge {
   position: fixed;
-  top: 8px;
+  top: calc(var(--titlebar) + 8px);
   right: 54px; /* leaves room for the menu button */
   padding: 6px 10px;
   font: 12px/1.2 var(--mono);
@@ -223,7 +225,7 @@ p { margin: 0 0 1rem; font-size: 0.9rem; line-height: 1.4; }
 /* ---------- Side menu ---------- */
 .menu-btn {
   position: fixed;
-  top: 8px;
+  top: calc(var(--titlebar) + 8px);
   right: 8px;
   z-index: 30;
   width: 36px;
@@ -241,7 +243,7 @@ body.idle .menu-btn { opacity: 0; }
 
 .menu {
   position: fixed;
-  top: 0;
+  top: var(--titlebar);
   right: 0;
   bottom: 0;
   z-index: 20;
@@ -352,7 +354,7 @@ body.idle .menu-btn { opacity: 0; }
 /* ---------- Quit confirmation ---------- */
 .modal {
   position: fixed;
-  inset: 0;
+  inset: var(--titlebar) 0 0 0;
   z-index: 40;
   display: grid;
   place-items: center;
@@ -360,3 +362,25 @@ body.idle .menu-btn { opacity: 0; }
 }
 .modal[hidden] { display: none; }
 .modal .actions { display: flex; gap: 8px; }
+
+/* ---------- Title strip (Windows draws its buttons on the right) ---------- */
+.titlebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 50;
+  height: var(--titlebar);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 140px 0 10px; /* the right side is where the window buttons go */
+  font: 12px var(--mono);
+  color: var(--muted);
+  background: var(--bg);
+  -webkit-app-region: drag; /* drag the window from here */
+  user-select: none;
+}
+.titlebar .glyph { width: 16px; height: 16px; }
+.glyph .body { fill: var(--accent); }
+.glyph .cut { fill: var(--bg); }

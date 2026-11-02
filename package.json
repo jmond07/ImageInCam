@@ -11,18 +11,12 @@
   "build": {
     "appId": "com.jmond07.imageincam",
     "productName": "ImageInCam",
-    "files": [
-      "main.js",
-      "preload.js",
-      "package.json",
-      "src/**/*"
-    ],
-    "win": {
-      "target": "nsis"
-    },
+    "files": ["main.js", "preload.js", "package.json", "src/**/*"],
+    "win": { "target": "nsis", "icon": "build/icon.ico" },
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "ImageInCam-Setup-${version}.${ext}"
     }
   },
   "repository": {
@@ -30,7 +24,7 @@
     "url": "git+https://github.com/jmond07/ImageInCam.git"
   },
   "keywords": [],
-  "author": "",
+  "author": "jmond07",
   "license": "MIT",
   "type": "commonjs",
   "bugs": {

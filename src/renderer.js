@@ -678,7 +678,7 @@ function drawHands() {
 }
 
 // Draws a circular progress ring with a label under it
-function drawProgressRing(x, y, progress, label) {
+function drawProgressRing(x, y, progress, label, color = theme.accent) {
   const r = 36;
   ctx.save();
   ctx.lineWidth = 6;
@@ -688,7 +688,7 @@ function drawProgressRing(x, y, progress, label) {
   ctx.arc(x, y, r, 0, Math.PI * 2);
   ctx.stroke();
 
-  ctx.strokeStyle = theme.accent;
+  ctx.strokeStyle = color;
   ctx.beginPath();
   ctx.arc(x, y, r, -Math.PI / 2, -Math.PI / 2 + progress * Math.PI * 2);
   ctx.stroke();
@@ -713,13 +713,13 @@ function drawDeleteProgress() {
   const r = scene.rect(item, canvas);
 
   ctx.save();
-  ctx.strokeStyle = theme.accent;
+  ctx.strokeStyle = '#ffffff';
   ctx.lineWidth = 3;
   ctx.setLineDash([8, 6]);
   ctx.strokeRect(r.x, r.y, r.w, r.h);
   ctx.restore();
 
-  drawProgressRing(r.x + r.w / 2, r.y + r.h / 2, progress, 'Deleting…');
+  drawProgressRing(r.x + r.w / 2, r.y + r.h / 2, progress, 'Deleting…', '#ffffff');
 }
 
 function updateLab() {
