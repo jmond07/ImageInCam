@@ -1,7 +1,6 @@
 # ImageInCam
 
 Put images on your webcam and move them with your hands. Pinch to drop a picture, drag it around, resize it with your other hand, point at it to delete it. Everything runs on your computer.
-![Icon](/build/icon.png)
 
 ## Download
 
